@@ -1,10 +1,24 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+import { getI18n, getSpecialityLabel } from '../constants/i18n'
+
+const props = defineProps({
+  language: {
+    type: String,
+    default: 'fr'
+  },
   speciality: String,
   name: String,
   city: String,
   country: String,
   pc: String,
+})
+
+const ui = computed(() => getI18n(props.language))
+
+const specialityLabel = computed(() => {
+  if (!props.speciality) return ''
+  return getSpecialityLabel(props.speciality, props.language, 'shortLabels')
 })
 </script>
 
@@ -15,7 +29,7 @@ defineProps({
       <div class="left">
         <h3 class="speciality">
           <span v-if="speciality" class="text">
-            {{ speciality === "Développement Logiciel, Tests et Qualité" ? "Dev Logiciel" : speciality }}
+            {{ specialityLabel }}
           </span>
           <span v-else class="skeleton skeleton-text"></span>
         </h3>
@@ -26,20 +40,20 @@ defineProps({
       </div>
       <div class="right">
         <p class="city">
-          <span v-if="city">Ville : {{ city }}</span>
+          <span v-if="city">{{ ui.companyItem.city }} : {{ city }}</span>
           <span v-else class="skeleton skeleton-text short"></span>
         </p>
         <p class="country">
-          <span v-if="country">Pays : {{ country }}</span>
+          <span v-if="country">{{ ui.companyItem.country }} : {{ country }}</span>
           <span v-else class="skeleton skeleton-text short"></span>
         </p>
         <p class="pc">
-          <span v-if="pc">Code Postal : {{ pc }}</span>
+          <span v-if="pc">{{ ui.companyItem.postalCode }} : {{ pc }}</span>
           <span v-else class="skeleton skeleton-text short"></span>
         </p>
       </div>
     </div>
-    <p class="more">Cliquer pour plus d'informations</p>
+    <p class="more">{{ ui.companyItem.more }}</p>
   </div>
 </template>
 

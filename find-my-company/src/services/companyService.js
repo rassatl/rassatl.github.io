@@ -12,11 +12,29 @@ import {
   addDoc,
   getDocs,
   getDoc,
+  query,
+  where,
   doc,
   updateDoc,
   deleteDoc,
   Timestamp
 } from 'firebase/firestore';
+
+export const COMPANY_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+};
+
+const mapCompanyDoc = (snapshotDoc) => {
+  const data = snapshotDoc.data();
+  return {
+    id: snapshotDoc.id,
+    ...data,
+    createdAt: data.createdAt?.toDate?.() || new Date(),
+    updatedAt: data.updatedAt?.toDate?.() || new Date(),
+    lastHiringDate: data.lastHiringDate?.toDate?.() || data.lastHiringDate || null,
+  };
+};
 
 /**
  * Structure de données pour une entreprise
@@ -50,20 +68,8 @@ import {
 export const getAllCompanies = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'companies'));
-    const companies = [];
-    
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      companies.push({
-        id: doc.id,
-        ...data,
-        // Convertir les timestamps Firestore en dates JavaScript
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-        updatedAt: data.updatedAt?.toDate?.() || new Date(),
-        lastHiringDate: data.lastHiringDate?.toDate?.() || data.lastHiringDate || null,
-      });
-    });
-    
+    const companies = querySnapshot.docs.map(mapCompanyDoc);
+
     return companies;
   } catch (error) {
     console.error('❌ Erreur lors de la récupération des entreprises:', error);
@@ -83,14 +89,7 @@ export const getCompanyById = async (companyId) => {
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...data,
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-        updatedAt: data.updatedAt?.toDate?.() || new Date(),
-        lastHiringDate: data.lastHiringDate?.toDate?.() || data.lastHiringDate || null,
-      };
+      return mapCompanyDoc(docSnap);
     }
     
     return null;
@@ -108,6 +107,10 @@ export const getCompanyById = async (companyId) => {
  */
 export const createCompany = async (companyData) => {
   try {
+    if (!companyData.createdByUid) {
+      throw new Error('Utilisateur non connecté. Veuillez vous connecter pour proposer une entreprise.');
+    }
+
     // Validation des données obligatoires
     const requiredFields = ['name', 'speciality', 'address', 'city', 'country', 'pc'];
     const missingFields = requiredFields.filter((field) => !companyData[field]);
@@ -138,6 +141,10 @@ export const createCompany = async (companyData) => {
       description: companyData.description || '',
       website: companyData.website || '',
       logo_url: companyData.logo_url || '',
+      status: COMPANY_STATUS.PENDING,
+      validatedAt: null,
+      validatedByUid: null,
+      validatedByEmail: null,
     };
     
     const docRef = await addDoc(collection(db, 'companies'), dataToAdd);
@@ -149,10 +156,67 @@ export const createCompany = async (companyData) => {
       ...companyData,
       createdAt: new Date(),
       updatedAt: new Date(),
+      status: COMPANY_STATUS.PENDING,
     };
   } catch (error) {
     console.error('❌ Erreur lors de la création de l\'entreprise:', error);
     throw new Error(`Impossible de créer l'entreprise: ${error.message}`);
+  }
+};
+
+/**
+ * Récupère les entreprises visibles pour les visiteurs et utilisateurs connectés
+ * Inclut les anciennes entrées sans statut (compatibilité)
+ * @returns {Promise<Company[]>}
+ */
+export const getPublicCompanies = async () => {
+  const companies = await getAllCompanies();
+  return companies.filter((company) => {
+    if (!company.status) return true;
+    return company.status === COMPANY_STATUS.APPROVED;
+  });
+};
+
+/**
+ * Récupère les entreprises en attente de validation admin
+ * @returns {Promise<Company[]>}
+ */
+export const getPendingCompanies = async () => {
+  try {
+    const pendingQuery = query(
+      collection(db, 'companies'),
+      where('status', '==', COMPANY_STATUS.PENDING)
+    );
+    const querySnapshot = await getDocs(pendingQuery);
+    return querySnapshot.docs.map(mapCompanyDoc);
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des entreprises en attente:', error);
+    throw new Error(`Impossible de récupérer la liste d'attente: ${error.message}`);
+  }
+};
+
+/**
+ * Valide une entreprise en attente
+ * @param {string} companyId - ID de l'entreprise
+ * @param {{uid: string, email?: string}} adminUser - Admin validant l'entreprise
+ */
+export const approveCompany = async (companyId, adminUser) => {
+  try {
+    if (!adminUser?.uid) {
+      throw new Error('Action réservée aux administrateurs connectés.');
+    }
+
+    const companyRef = doc(db, 'companies', companyId);
+    await updateDoc(companyRef, {
+      status: COMPANY_STATUS.APPROVED,
+      validatedAt: Timestamp.now(),
+      validatedByUid: adminUser.uid,
+      validatedByEmail: adminUser.email || null,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la validation de l\'entreprise:', error);
+    throw new Error(`Impossible de valider l'entreprise: ${error.message}`);
   }
 };
 

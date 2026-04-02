@@ -5,16 +5,25 @@
  * Inclut un sélecteur de calques style Google Maps (Plan / Satellite / Terrain / Sombre).
  */
 
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch, computed } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getAllCompanies } from '../services/companyService';
+import { getPublicCompanies } from '../services/companyService';
+import { getI18n, MAP_LAYERS } from '../constants/i18n';
 
 const mapContainer = ref(null);
 
 const props = defineProps({
   isOpen: Boolean,
   selectedSpeciality: String,
+  language: {
+    type: String,
+    default: 'fr',
+  },
+  refreshToken: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits(['update-visible-companies']);
@@ -23,60 +32,14 @@ const companies = ref([]);
 let map = null;
 let currentTileLayer = null;
 
-// ─── Définition des calques disponibles ───────────────────────────────────
-const LAYERS = [
-  {
-    id: 'plan',
-    label: 'Plan',
-    icon: '🗺️',
-    thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/6/32/22.png',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    },
-  },
-  {
-    id: 'satellite',
-    label: 'Satellite',
-    icon: '🛰️',
-    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/22/32',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    options: {
-      attribution:
-        'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      maxZoom: 19,
-    },
-  },
-  {
-    id: 'terrain',
-    label: 'Terrain',
-    icon: '🏔️',
-    thumb: 'https://a.tile.opentopomap.org/6/32/22.png',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    options: {
-      attribution:
-        'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
-      subdomains: 'abc',
-      maxZoom: 17,
-    },
-  },
-  {
-    id: 'dark',
-    label: 'Sombre',
-    icon: '🌙',
-    thumb: 'https://a.basemaps.cartocdn.com/dark_all/6/32/22.png',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    },
-  },
-];
+const ui = computed(() => getI18n(props.language));
+
+const localizedLayers = computed(() => {
+  return MAP_LAYERS.map((layer) => ({
+    ...layer,
+    label: layer.labels[props.language] || layer.labels.fr,
+  }));
+});
 
 const activeLayerId = ref('plan');
 const layerPanelOpen = ref(false);
@@ -110,6 +73,7 @@ function updateVisibleCompanies() {
   const bounds = map.getBounds();
   const visibleCompanies = companies.value.filter(
     (c) =>
+      (!props.selectedSpeciality || c.speciality === props.selectedSpeciality) &&
       c.x >= bounds.getSouth() &&
       c.x <= bounds.getNorth() &&
       c.y >= bounds.getWest() &&
@@ -118,9 +82,18 @@ function updateVisibleCompanies() {
   emit('update-visible-companies', visibleCompanies);
 }
 
+const clearMarkers = () => {
+  companies.value.forEach((company) => {
+    if (company.marker && map?.hasLayer(company.marker)) {
+      company.marker.remove();
+    }
+  });
+};
+
 const fetchCompaniesAndAddMarkers = async () => {
   try {
-    const allCompanies = await getAllCompanies();
+    clearMarkers();
+    const allCompanies = await getPublicCompanies();
     allCompanies.forEach((company) => {
       if (company.x && company.y && company.name) {
         const marker = L.marker([company.x, company.y], { icon: redIcon }).addTo(map);
@@ -151,7 +124,7 @@ onMounted(async () => {
     worldCopyJump: false,
   });
 
-  const defaultLayer = LAYERS.find((l) => l.id === 'plan');
+  const defaultLayer = localizedLayers.value.find((l) => l.id === 'plan');
   currentTileLayer = L.tileLayer(defaultLayer.url, defaultLayer.options).addTo(map);
 
   await fetchCompaniesAndAddMarkers();
@@ -176,7 +149,7 @@ watch(
     companies.value.forEach((company) => {
       if (company.marker) {
         const shouldShow =
-          !newSpeciality || newSpeciality === 'Toutes' || company.speciality === newSpeciality;
+          !newSpeciality || company.speciality === newSpeciality;
         if (shouldShow) {
           if (!map.hasLayer(company.marker)) company.marker.addTo(map);
         } else {
@@ -187,6 +160,14 @@ watch(
     updateVisibleCompanies();
   },
   { immediate: true }
+);
+
+watch(
+  () => props.refreshToken,
+  async () => {
+    if (!map) return;
+    await fetchCompaniesAndAddMarkers();
+  }
 );
 </script>
 
@@ -205,28 +186,28 @@ watch(
         class="layer-toggle-btn"
         :class="{ active: layerPanelOpen }"
         @click="layerPanelOpen = !layerPanelOpen"
-        title="Changer le type de carte"
+        :title="ui.map.switchMapType"
       >
         <div class="layer-thumb-wrap">
           <img
-            :src="LAYERS.find(l => l.id === activeLayerId)?.thumb"
+            :src="localizedLayers.find(l => l.id === activeLayerId)?.thumb"
             class="layer-thumb"
             alt=""
           />
           <span class="layer-thumb-icon">
-            {{ LAYERS.find(l => l.id === activeLayerId)?.icon }}
+            {{ localizedLayers.find(l => l.id === activeLayerId)?.icon }}
           </span>
         </div>
-        <span class="layer-btn-label">Calques</span>
+        <span class="layer-btn-label">{{ ui.map.layers }}</span>
       </button>
 
       <!-- Panneau des options -->
       <Transition name="layer-panel">
         <div v-if="layerPanelOpen" class="layer-panel">
-          <div class="layer-panel-title">Type de carte</div>
+          <div class="layer-panel-title">{{ ui.map.mapType }}</div>
           <div class="layer-options">
             <button
-              v-for="layer in LAYERS"
+              v-for="layer in localizedLayers"
               :key="layer.id"
               class="layer-option"
               :class="{ selected: activeLayerId === layer.id }"

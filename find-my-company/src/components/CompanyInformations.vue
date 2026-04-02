@@ -7,36 +7,36 @@
 
 import { ref, computed } from 'vue';
 import { deleteCompany, addStudentRating, calculateAverageRating } from '../services/companyService';
+import { getI18n, getSectorLabel, getSpecialityLabel } from '../constants/i18n';
 
 const props = defineProps({
   company: {
     type: Object,
     required: true
+  },
+  language: {
+    type: String,
+    default: 'fr'
   }
 });
 
 const emit = defineEmits(['refresh', 'edit', 'delete']);
 
-// États pour l'ajout d'avis d'étudiants
 const showRatingForm = ref(false);
 const studentRating = ref(5);
 const studentComment = ref('');
 const isSubmittingRating = ref(false);
 const ratingMessage = ref('');
+const ui = computed(() => getI18n(props.language));
 
-/**
- * Formate une date au format lisible français
- * @param {Date} date - Date à formater
- * @returns {string} Date formatée
- */
 const formatDate = (date) => {
-  if (!date) return 'Non spécifiée';
+  if (!date) return ui.value.companyInfo.notSpecified;
   const normalizedDate = date?.toDate?.() || date;
   const d = new Date(normalizedDate);
   if (Number.isNaN(d.getTime())) {
-    return 'Non spécifiée';
+    return ui.value.companyInfo.notSpecified;
   }
-  return d.toLocaleDateString('fr-FR', {
+  return d.toLocaleDateString(props.language === 'en' ? 'en-GB' : 'fr-FR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -52,9 +52,6 @@ const websiteHref = computed(() => {
   return `https://${raw}`;
 });
 
-/**
- * Calcule la note moyenne et le nombre d'avis
- */
 const averageRating = computed(() => {
   return calculateAverageRating(props.company);
 });
@@ -63,142 +60,115 @@ const ratingsCount = computed(() => {
   return props.company?.studentRatings?.length || 0;
 });
 
-/**
- * Soumet un nouvel avis d'étudiant
- */
+const specialityLabel = computed(() => {
+  return getSpecialityLabel(props.company?.speciality, props.language, 'fullLabels');
+});
+
 const submitRating = async () => {
   if (!studentComment.value.trim()) {
-    ratingMessage.value = 'Veuillez entrer un commentaire';
+    ratingMessage.value = ui.value.companyInfo.commentRequired;
     return;
   }
 
   try {
     isSubmittingRating.value = true;
     ratingMessage.value = '';
-
-    // Ajouter l'avis via le service
     await addStudentRating(props.company.id, studentRating.value, studentComment.value);
-
-    // Réinitialiser le formulaire
     studentComment.value = '';
     studentRating.value = 5;
     showRatingForm.value = false;
-
-    // Émettre l'événement de rafraîchissement
     emit('refresh');
-    ratingMessage.value = '✅ Avis ajouté avec succès!';
+    ratingMessage.value = ui.value.companyInfo.ratingSuccess;
     setTimeout(() => {
       ratingMessage.value = '';
     }, 3000);
   } catch (error) {
     console.error('Erreur lors de l\'ajout de l\'avis:', error);
-    ratingMessage.value = '❌ Erreur lors de l\'ajout de l\'avis';
+    ratingMessage.value = ui.value.companyInfo.ratingError;
   } finally {
     isSubmittingRating.value = false;
   }
 };
 
-/**
- * Supprime l'entreprise avec confirmation
- */
 const deleteCompanyHandler = async () => {
-  if (!confirm(`Êtes-vous sûr de vouloir supprimer ${props.company.name}?`)) {
+  if (!confirm(`${ui.value.companyInfo.confirmDelete} ${props.company.name}?`)) {
     return;
   }
 
   try {
     await deleteCompany(props.company.id);
     emit('delete');
-    alert('Entreprise supprimée avec succès!');
+    alert(ui.value.companyInfo.deleteSuccess);
   } catch (error) {
     console.error('Erreur lors de la suppression:', error);
-    alert('Erreur lors de la suppression de l\'entreprise');
+    alert(ui.value.companyInfo.deleteError);
   }
 };
 
-/**
- * Émet l'événement d'édition
- */
 const editCompanyHandler = () => {
   emit('edit', props.company);
 };
-
 </script>
 
 <template>
   <div v-if="company" class="company-details">
-    <!-- En-tête avec titre et actions -->
     <div class="header">
       <h2>{{ company.name }}</h2>
-      <div class="actions">
-        <button class="btn-edit" @click="editCompanyHandler" title="Éditer">✏️</button>
-        <button class="btn-delete" @click="deleteCompanyHandler" title="Supprimer">🗑️</button>
-      </div>
     </div>
 
-    <!-- Informations principales -->
     <section class="info-section">
-      <h3>📍 Localisation</h3>
-      <p><strong>Adresse:</strong> {{ company.address }}</p>
-      <p><strong>Ville:</strong> {{ company.city }}</p>
-      <p><strong>Code Postal:</strong> {{ company.pc }}</p>
-      <p><strong>Pays:</strong> {{ company.country }}</p>
+      <h3>{{ ui.companyInfo.location }}</h3>
+      <p><strong>{{ ui.companyInfo.address }}:</strong> {{ company.address }}</p>
+      <p><strong>{{ ui.companyInfo.city }} :</strong> {{ company.city }}</p>
+      <p><strong>{{ ui.companyInfo.postalCode }}:</strong> {{ company.pc }}</p>
+      <p><strong>{{ ui.companyInfo.country }} :</strong> {{ company.country }}</p>
       <p v-if="company.website" class="website-link">
-        <strong>Site web:</strong>
-        <a :href="websiteHref" target="_blank" rel="noopener noreferrer">
-          {{ company.website }}
-        </a>
+        <strong>{{ ui.companyInfo.website }} : </strong><a :href="websiteHref" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
       </p>
     </section>
 
-    <!-- Spécialité et secteurs -->
     <section class="info-section">
-      <h3>💼 Domaines d'activité</h3>
-      <p><strong>Spécialité:</strong> {{ company.speciality }}</p>
+      <h3>{{ ui.companyInfo.domains }}</h3>
+      <p><strong>{{ ui.companyInfo.speciality }}:</strong> {{ specialityLabel }}</p>
       <div v-if="company.sectors && company.sectors.length > 0" class="sectors">
-        <strong>Secteurs:</strong>
+        <strong>{{ ui.companyInfo.sectors }}:</strong>
         <div class="sector-tags">
           <span v-for="sector in company.sectors" :key="sector" class="tag">
-            {{ sector }}
+            {{ getSectorLabel(sector, props.language) }}
           </span>
         </div>
       </div>
     </section>
 
-    <!-- Description -->
     <section v-if="company.description" class="info-section">
-      <h3>📝 Description</h3>
+      <h3>{{ ui.companyInfo.description }}</h3>
       <p>{{ company.description }}</p>
     </section>
 
-    <!-- Informations temporelles -->
     <section class="info-section">
-      <h3>📅 Dates</h3>
+      <h3>{{ ui.companyInfo.dates }}</h3>
       <p v-if="company.lastHiringDate">
-        <strong>Dernière embauche:</strong> {{ formatDate(company.lastHiringDate) }}
+        <strong>{{ ui.companyInfo.lastHiringDate }}:</strong> {{ formatDate(company.lastHiringDate) }}
       </p>
-      <p v-else><strong>Dernière embauche:</strong> Non spécifiée</p>
-      <p><strong>Profil créé:</strong> {{ formatDate(company.createdAt) }}</p>
-      <p><strong>Dernière modification:</strong> {{ formatDate(company.updatedAt) }}</p>
+      <p v-else><strong>{{ ui.companyInfo.lastHiringDate }}:</strong> {{ ui.companyInfo.notSpecified }}</p>
+      <p><strong>{{ ui.companyInfo.profileCreated }}:</strong> {{ formatDate(company.createdAt) }}</p>
+      <p><strong>{{ ui.companyInfo.lastUpdate }}:</strong> {{ formatDate(company.updatedAt) }}</p>
     </section>
 
-    <!-- Avis des étudiants -->
     <section class="info-section ratings-section">
-      <h3>⭐ Avis des étudiants</h3>
-      
-      <!-- Résumé des avis -->
+      <h3>{{ ui.companyInfo.ratings }}</h3>
+
       <div v-if="ratingsCount > 0" class="ratings-summary">
         <div class="average-rating">
           <span class="stars">{{ '⭐'.repeat(Math.round(averageRating)) }}</span>
           <span class="score">{{ averageRating }}/5</span>
-          <span class="count">({{ ratingsCount }} avis)</span>
+          <span class="count">({{ ratingsCount }} {{ ui.companyInfo.ratingCount }})</span>
         </div>
       </div>
       <div v-else class="no-ratings">
-        <p>Aucun avis pour le moment. Soyez le premier à donner votre avis!</p>
+        <p>{{ ui.companyInfo.noRatings }}</p>
       </div>
 
-      <!-- Liste des avis -->
       <div v-if="company.studentRatings && company.studentRatings.length > 0" class="ratings-list">
         <div v-for="(rating, index) in company.studentRatings" :key="index" class="rating-item">
           <div class="rating-header">
@@ -209,31 +179,30 @@ const editCompanyHandler = () => {
         </div>
       </div>
 
-      <!-- Formulaire d'ajout d'avis -->
       <div v-if="!showRatingForm" class="add-rating-button">
         <button @click="showRatingForm = true" class="btn-primary">
-          ➕ Ajouter un avis
+          {{ ui.companyInfo.addRating }}
         </button>
       </div>
 
       <div v-else class="rating-form">
         <div class="form-group">
-          <label for="rating">Note (1-5):</label>
+          <label for="rating">{{ ui.companyInfo.score }}</label>
           <select id="rating" v-model.number="studentRating">
-            <option value="1">1 - Mauvais</option>
-            <option value="2">2 - Insuffisant</option>
-            <option value="3">3 - Moyen</option>
-            <option value="4">4 - Bon</option>
-            <option value="5">5 - Excellent</option>
+            <option value="1">1 - {{ ui.companyInfo.scoreLabels[0] }}</option>
+            <option value="2">2 - {{ ui.companyInfo.scoreLabels[1] }}</option>
+            <option value="3">3 - {{ ui.companyInfo.scoreLabels[2] }}</option>
+            <option value="4">4 - {{ ui.companyInfo.scoreLabels[3] }}</option>
+            <option value="5">5 - {{ ui.companyInfo.scoreLabels[4] }}</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label for="comment">Commentaire:</label>
+          <label for="comment">{{ ui.companyInfo.comment }}</label>
           <textarea
             id="comment"
             v-model="studentComment"
-            placeholder="Partagez votre expérience avec cette entreprise..."
+            :placeholder="ui.companyInfo.commentPlaceholder"
             rows="4"
           ></textarea>
         </div>
@@ -248,13 +217,13 @@ const editCompanyHandler = () => {
             class="btn-submit"
             :disabled="isSubmittingRating"
           >
-            {{ isSubmittingRating ? 'Envoi...' : 'Envoyer l\'avis' }}
+            {{ isSubmittingRating ? ui.companyInfo.sending : ui.companyInfo.send }}
           </button>
           <button
             @click="showRatingForm = false"
             class="btn-cancel"
           >
-            Annuler
+            {{ ui.companyInfo.cancel }}
           </button>
         </div>
       </div>
@@ -268,8 +237,10 @@ const editCompanyHandler = () => {
   flex-direction: column;
   gap: 20px;
   color: var(--black);
-  max-height: 85vh;
-  overflow-y: auto;
+  width: 100%;
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -279,12 +250,15 @@ const editCompanyHandler = () => {
   align-items: center;
   border-bottom: 3px solid var(--red-esigelec);
   padding-bottom: 15px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .header h2 {
   color: var(--red-esigelec);
   margin: 0;
   flex: 1;
+  min-width: 0;
 }
 
 .actions {
@@ -337,6 +311,7 @@ const editCompanyHandler = () => {
 .info-section p {
   margin: 8px 0;
   line-height: 1.6;
+  word-break: break-word;
 }
 
 .website-link a {
@@ -477,10 +452,16 @@ const editCompanyHandler = () => {
   padding: 15px;
   border-radius: 6px;
   border: 2px dashed var(--red-esigelec);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .rating-form .form-group {
   margin-bottom: 15px;
+  min-width: 0;
 }
 
 .rating-form label {
@@ -498,6 +479,9 @@ const editCompanyHandler = () => {
   border-radius: 4px;
   font-family: inherit;
   font-size: 14px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .rating-form textarea {
@@ -519,6 +503,8 @@ const editCompanyHandler = () => {
   color: #cc0000;
   border: 1px solid #ffcccc;
   font-size: 14px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .alert-success {
@@ -531,6 +517,12 @@ const editCompanyHandler = () => {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.form-actions button {
+  flex: 1 1 160px;
+  max-width: 100%;
 }
 
 .btn-submit,

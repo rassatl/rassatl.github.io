@@ -15,6 +15,14 @@ const props = defineProps({
   companies: {
     type: Array,
     required: true
+  },
+  sidebarOpen: {
+    type: Boolean,
+    default: false,
+  },
+  language: {
+    type: String,
+    default: 'fr'
   }
 })
 
@@ -77,6 +85,7 @@ const handleEdit = (company) => {
       class="company-list-item"
     >
       <CompanyItem
+        :language="props.language"
         :speciality="company.speciality"
         :name="company.name"
         :city="company.city"
@@ -87,10 +96,15 @@ const handleEdit = (company) => {
   </ul>
 
   <!-- Modale affichant les détails complets de l'entreprise sélectionnée -->
-  <ModalCompany :isOpen="isModalOpen" @close="closeModal">
+  <ModalCompany
+    :isOpen="isModalOpen"
+    :sidebarOffset="props.sidebarOpen ? 400 : 0"
+    @close="closeModal"
+  >
     <CompanyInformations
       v-if="selectedCompany"
       :company="selectedCompany"
+      :language="props.language"
       @refresh="handleRefresh"
       @delete="handleDelete"
       @edit="handleEdit"

@@ -23,6 +23,8 @@ Whether you're a developer or an entrepreneur, this application provides a power
 - **Company Filters**: Filter companies based on specialties and easily find relevant businesses.
 - **Dynamic Updates**: Real-time updates for map markers based on visible regions and zoom levels.
 - **Add/Edit Companies**: Easily add or edit companies using an intuitive interface.
+- **Role-based Access**: Guest users can browse companies, authenticated users can submit new companies, and admins can approve pending submissions.
+- **Admin Validation Workflow**: Newly submitted companies stay hidden until an admin validates them.
 - **Mobile Responsive**: Optimized for both desktop and mobile users.
 
 ## 🛠️ Tech Stack
@@ -60,6 +62,18 @@ To get started with this project locally, follow these steps:
 4. **Set up Firebase**:
    - Create a Firebase project at [Firebase Console](https://console.firebase.google.com/).
    - Obtain your Firebase config and place it in the appropriate file (e.g., `.env` or `firebaseConfig.js`).
+    - In this repository, create [find-my-company/.env](find-my-company/.env) from [find-my-company/.env.example](find-my-company/.env.example) and set `VITE_FIREBASE_API_KEY`.
+    - Configure admin emails in `.env`:
+
+     ```bash
+     VITE_ADMIN_EMAILS=admin1@domain.com,admin2@domain.com
+     ```
+
+    - Alternatively, for a single admin:
+
+     ```bash
+     VITE_ADMIN_EMAIL=admin@domain.com
+     ```
 
 5. **Run the development server**:
 

@@ -3,12 +3,25 @@
  * Formulaire d'ajout d'entreprise avec géocodage d'adresse.
  * Inclut un sélecteur de calques et le positionnement manuel du marqueur.
  */
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { createCompany } from '../services/companyService';
+import { getI18n, MAP_LAYERS, SECTOR_OPTIONS, SPECIALITY_OPTIONS } from '../constants/i18n';
+
+const props = defineProps({
+  language: {
+    type: String,
+    default: 'fr',
+  },
+  currentUser: {
+    type: Object,
+    default: null,
+  },
+});
 
 const emit = defineEmits(['refresh', 'close']);
+const ui = computed(() => getI18n(props.language));
 
 const speciality = ref('');
 const name = ref('');
@@ -36,58 +49,17 @@ let debounceTimeout = null;
 const mapContainer = ref(null);
 
 // ─── Définition des calques disponibles ───────────────────────────────────
-const LAYERS = [
-  {
-    id: 'plan',
-    label: 'Plan',
-    icon: '🗺️',
-    thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/6/32/22.png',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    },
-  },
-  {
-    id: 'satellite',
-    label: 'Satellite',
-    icon: '🛰️',
-    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/22/32',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    options: {
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      maxZoom: 19,
-    },
-  },
-  {
-    id: 'terrain',
-    label: 'Terrain',
-    icon: '🏔️',
-    thumb: 'https://a.tile.opentopomap.org/6/32/22.png',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    options: {
-      attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap',
-      subdomains: 'abc',
-      maxZoom: 17,
-    },
-  },
-  {
-    id: 'dark',
-    label: 'Sombre',
-    icon: '🌙',
-    thumb: 'https://a.basemaps.cartocdn.com/dark_all/6/32/22.png',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    options: {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    },
-  },
-];
+const LAYERS = MAP_LAYERS;
 
 const activeLayerId = ref('plan');
 const layerPanelOpen = ref(false);
+
+const localizedLayers = computed(() => {
+  return LAYERS.map((layer) => ({
+    ...layer,
+    label: layer.labels[props.language] || layer.labels.fr,
+  }));
+});
 
 const redIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -98,21 +70,19 @@ const redIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const specialityOptions = [
-  'Développement Logiciel, Tests et Qualité',
-  'IA & Big Data',
-];
+const specialityOptions = computed(() => {
+  return SPECIALITY_OPTIONS.filter((item) => item.value !== '').map((item) => ({
+    value: item.value,
+    label: item.fullLabels?.[props.language] || item.fullLabels?.fr || item.value,
+  }));
+});
 
-const sectorOptions = [
-  'Technologie',
-  'Santé',
-  'Finance',
-  'Éducation',
-  'Commerce',
-  'Ressources Humaines',
-  'Marketing',
-  'Autre',
-];
+const sectorOptions = computed(() => {
+  return SECTOR_OPTIONS.map((item) => ({
+    value: item.value,
+    label: item.labels[props.language] || item.labels.fr,
+  }));
+});
 
 // ─── Changer de calque ────────────────────────────────────────────────────
 function switchLayer(layerDef) {
@@ -197,7 +167,7 @@ watch([address, city, pc, country], ([newAddress, newCity, newPc, newCountry]) =
     if (geocodingStatus.value !== 'manual') geocodingStatus.value = '';
 
     try {
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(fullAddress)}&limit=1&lang=fr`;
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(fullAddress)}&limit=1&lang=${props.language}`;
       const response = await fetch(url, { headers: { Accept: 'application/json' } });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -207,7 +177,7 @@ watch([address, city, pc, country], ([newAddress, newCity, newPc, newCountry]) =
 
       if (!Array.isArray(features) || features.length === 0) {
         geocodingStatus.value = 'error';
-        errorMessage.value = 'Adresse non trouvée. Vérifiez les informations saisies.';
+        errorMessage.value = ui.value.addCompany.addressNotFound;
         return;
       }
 
@@ -222,7 +192,7 @@ watch([address, city, pc, country], ([newAddress, newCity, newPc, newCountry]) =
     } catch (error) {
       console.error('Erreur geocodage Photon:', error);
       geocodingStatus.value = 'error';
-      errorMessage.value = "Erreur lors de la géolocalisation de l'adresse.";
+      errorMessage.value = ui.value.addCompany.geocodingFailed;
     } finally {
       isGeocoding.value = false;
     }
@@ -244,36 +214,36 @@ const validateForm = () => {
   errorMessage.value = '';
 
   const requiredFields = [
-    { value: speciality.value, label: 'Spécialité' },
-    { value: name.value, label: 'Nom' },
-    { value: address.value, label: 'Adresse' },
-    { value: city.value, label: 'Ville' },
-    { value: country.value, label: 'Pays' },
-    { value: pc.value, label: 'Code postal' },
-    { value: x.value, label: 'Latitude (x)' },
-    { value: y.value, label: 'Longitude (y)' },
+    { value: speciality.value, label: ui.value.addCompany.speciality },
+    { value: name.value, label: ui.value.addCompany.name },
+    { value: address.value, label: ui.value.addCompany.address },
+    { value: city.value, label: ui.value.addCompany.city },
+    { value: country.value, label: ui.value.addCompany.country },
+    { value: pc.value, label: ui.value.addCompany.postalCode },
+    { value: x.value, label: ui.value.addCompany.latitude },
+    { value: y.value, label: ui.value.addCompany.longitude },
   ];
 
   const firstMissing = requiredFields.find((field) => !field.value && field.value !== 0);
   if (firstMissing) {
-    errorMessage.value = `${firstMissing.label} est obligatoire.`;
+    errorMessage.value = `${firstMissing.label} ${ui.value.addCompany.required}.`;
     return false;
   }
 
   if (pc.value.trim().length < 3) {
-    errorMessage.value = 'Code postal invalide.';
+    errorMessage.value = ui.value.addCompany.invalidPostalCode;
     return false;
   }
 
   if (!isValidUrl(website.value)) {
-    errorMessage.value = 'URL du site web invalide (ex: https://exemple.com).';
+    errorMessage.value = ui.value.addCompany.invalidWebsite;
     return false;
   }
 
   const latitude = Number.parseFloat(x.value);
   const longitude = Number.parseFloat(y.value);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    errorMessage.value = 'Latitude (x) et Longitude (y) doivent être des nombres valides.';
+    errorMessage.value = ui.value.addCompany.invalidCoordinates;
     return false;
   }
 
@@ -301,6 +271,11 @@ const resetForm = () => {
 };
 
 const submitForm = async () => {
+  if (!props.currentUser?.uid) {
+    errorMessage.value = ui.value.auth.loginRequiredCreate;
+    return;
+  }
+
   if (!validateForm()) return;
 
   try {
@@ -320,10 +295,12 @@ const submitForm = async () => {
       sectors: sectors.value,
       website: website.value.trim(),
       lastHiringDate: lastHiringDate.value || null,
+      createdByUid: props.currentUser.uid,
+      createdByEmail: props.currentUser.email || '',
     });
 
     resetForm();
-    successMessage.value = 'Entreprise ajoutée avec succès.';
+    successMessage.value = ui.value.addCompany.createdSuccess;
     setTimeout(() => {
       successMessage.value = '';
     }, 3000);
@@ -332,7 +309,7 @@ const submitForm = async () => {
     emit('close');
   } catch (error) {
     console.error("Erreur lors de l'ajout:", error);
-    errorMessage.value = error.message || "Erreur lors de la création de l'entreprise.";
+    errorMessage.value = error.message || ui.value.addCompany.createError;
   } finally {
     isLoading.value = false;
   }
@@ -342,7 +319,7 @@ const submitForm = async () => {
 <template>
   <div class="form-map-wrapper">
     <form class="form-container" @submit.prevent="submitForm">
-      <h2>Ajouter une entreprise</h2>
+      <h2>{{ ui.addCompany.title }}</h2>
 
       <div v-if="errorMessage" class="alert alert-error">
         ❌ {{ errorMessage }}
@@ -352,55 +329,55 @@ const submitForm = async () => {
       </div>
 
       <div class="form-group">
-        <label for="speciality">Spécialité <span class="required">*</span></label>
+        <label for="speciality">{{ ui.addCompany.speciality }} <span class="required">*</span></label>
         <select id="speciality" v-model="speciality" required>
-          <option disabled value="">-- Sélectionner une spécialité --</option>
-          <option v-for="spec in specialityOptions" :key="spec" :value="spec">
-            {{ spec }}
+          <option disabled value="">{{ ui.addCompany.selectSpeciality }}</option>
+          <option v-for="spec in specialityOptions" :key="spec.value" :value="spec.value">
+            {{ spec.label }}
           </option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="name">Nom <span class="required">*</span></label>
-        <input id="name" v-model="name" type="text" placeholder="Ex: Google France" required />
+        <label for="name">{{ ui.addCompany.name }} <span class="required">*</span></label>
+        <input id="name" v-model="name" type="text" :placeholder="ui.addCompany.examples.name" required />
       </div>
 
       <div class="form-group">
-        <label for="country">Pays <span class="required">*</span></label>
-        <input id="country" v-model="country" type="text" placeholder="Ex: France" required />
+        <label for="country">{{ ui.addCompany.country }} <span class="required">*</span></label>
+        <input id="country" v-model="country" type="text" :placeholder="ui.addCompany.examples.country" required />
       </div>
 
       <div class="form-group">
-        <label for="city">Ville <span class="required">*</span></label>
-        <input id="city" v-model="city" type="text" placeholder="Ex: Paris" required />
+        <label for="city">{{ ui.addCompany.city }} <span class="required">*</span></label>
+        <input id="city" v-model="city" type="text" :placeholder="ui.addCompany.examples.city" required />
       </div>
 
       <div class="form-group">
-        <label for="address">Adresse <span class="required">*</span></label>
-        <input id="address" v-model="address" type="text" placeholder="Ex: 123 Rue de la Paix" required />
+        <label for="address">{{ ui.addCompany.address }} <span class="required">*</span></label>
+        <input id="address" v-model="address" type="text" :placeholder="ui.addCompany.examples.address" required />
       </div>
 
       <div class="form-group">
-        <label for="pc">Code Postal <span class="required">*</span></label>
-        <input id="pc" v-model="pc" type="text" placeholder="Ex: 75001" required />
+        <label for="pc">{{ ui.addCompany.postalCode }} <span class="required">*</span></label>
+        <input id="pc" v-model="pc" type="text" :placeholder="ui.addCompany.examples.postalCode" required />
       </div>
 
       <section class="map-inline">
-        <h3 class="map-title">Localisation automatique</h3>
-        <p class="map-subtitle">La carte se met à jour avec l'adresse. <strong>Vous pouvez aussi cliquer sur la carte ou glisser le marqueur pour ajuster.</strong></p>
+        <h3 class="map-title">{{ ui.addCompany.mapTitle }}</h3>
+        <p class="map-subtitle">{{ ui.addCompany.mapSubtitlePrefix }} <strong>{{ ui.addCompany.mapSubtitleStrong }}</strong></p>
 
         <div v-if="isGeocoding" class="geocoding-status geocoding-loading">
-          <span class="geocoding-spinner"></span> Recherche de l'adresse en cours…
+          <span class="geocoding-spinner"></span> {{ ui.addCompany.geocodingLoading }}
         </div>
         <div v-else-if="geocodingStatus === 'success'" class="geocoding-status geocoding-success">
-          ✅ Adresse localisée — {{ x }}, {{ y }}
+          {{ ui.addCompany.geocodingSuccess }} - {{ x }}, {{ y }}
         </div>
         <div v-else-if="geocodingStatus === 'manual'" class="geocoding-status geocoding-manual">
-          📍 Position ajustée manuellement — {{ x }}, {{ y }}
+          {{ ui.addCompany.geocodingManual }} - {{ x }}, {{ y }}
         </div>
         <div v-else-if="geocodingStatus === 'error'" class="geocoding-status geocoding-error">
-          ⚠️ Adresse introuvable, vérifiez les champs ci-dessus
+          {{ ui.addCompany.geocodingError }}
         </div>
 
         <div class="map-wrapper">
@@ -412,28 +389,28 @@ const submitForm = async () => {
               class="layer-toggle-btn"
               :class="{ active: layerPanelOpen }"
               @click="layerPanelOpen = !layerPanelOpen"
-              title="Changer le type de carte"
+              :title="ui.addCompany.changeMapType"
             >
               <div class="layer-thumb-wrap">
                 <img
-                  :src="LAYERS.find(l => l.id === activeLayerId)?.thumb"
+                  :src="localizedLayers.find(l => l.id === activeLayerId)?.thumb"
                   class="layer-thumb"
                   alt=""
                 />
                 <span class="layer-thumb-icon">
-                  {{ LAYERS.find(l => l.id === activeLayerId)?.icon }}
+                  {{ localizedLayers.find(l => l.id === activeLayerId)?.icon }}
                 </span>
               </div>
-              <span class="layer-btn-label">Calques</span>
+              <span class="layer-btn-label">{{ ui.addCompany.layers }}</span>
             </button>
 
             <Transition name="layer-panel">
               <div v-if="layerPanelOpen" class="layer-panel">
-                <div class="layer-panel-title">Type de carte</div>
+                <div class="layer-panel-title">{{ ui.addCompany.mapType }}</div>
                 <div class="layer-options">
                   <button
                     type="button"
-                    v-for="layer in LAYERS"
+                    v-for="layer in localizedLayers"
                     :key="layer.id"
                     class="layer-option"
                     :class="{ selected: activeLayerId === layer.id }"
@@ -455,45 +432,45 @@ const submitForm = async () => {
 
       <div class="coord-grid">
         <div class="form-group">
-          <label for="x">Latitude (x) <span class="required">*</span></label>
-          <input id="x" v-model="x" type="number" step="any" placeholder="Ex: 48.8566" required />
+          <label for="x">{{ ui.addCompany.latitude }} <span class="required">*</span></label>
+          <input id="x" v-model="x" type="number" step="any" :placeholder="ui.addCompany.examples.latitude" required />
         </div>
         <div class="form-group">
-          <label for="y">Longitude (y) <span class="required">*</span></label>
-          <input id="y" v-model="y" type="number" step="any" placeholder="Ex: 2.3522" required />
+          <label for="y">{{ ui.addCompany.longitude }} <span class="required">*</span></label>
+          <input id="y" v-model="y" type="number" step="any" :placeholder="ui.addCompany.examples.longitude" required />
         </div>
       </div>
 
       <hr class="separator" />
-      <h3>Informations complémentaires</h3>
+      <h3>{{ ui.addCompany.additionalInfo }}</h3>
 
       <div class="form-group">
-        <label for="description">Description</label>
-        <textarea id="description" v-model="description" placeholder="Décrivez brièvement l'entreprise..." rows="4"></textarea>
+        <label for="description">{{ ui.addCompany.description }}</label>
+        <textarea id="description" v-model="description" :placeholder="ui.addCompany.descriptionPlaceholder" rows="4"></textarea>
       </div>
 
       <div class="form-group">
-        <label for="sectors">Secteurs d'activité</label>
+        <label for="sectors">{{ ui.addCompany.sectors }}</label>
         <div class="checkbox-group">
-          <label v-for="sector in sectorOptions" :key="sector" class="checkbox-label">
-            <input type="checkbox" :value="sector" v-model="sectors" />
-            {{ sector }}
+          <label v-for="sector in sectorOptions" :key="sector.value" class="checkbox-label">
+            <input type="checkbox" :value="sector.value" v-model="sectors" />
+            {{ sector.label }}
           </label>
         </div>
       </div>
 
       <div class="form-group">
-        <label for="website">Site web</label>
-        <input id="website" v-model="website" type="url" placeholder="https://exemple.com" />
+        <label for="website">{{ ui.addCompany.website }}</label>
+        <input id="website" v-model="website" type="url" :placeholder="ui.addCompany.examples.website" />
       </div>
 
       <div class="form-group">
-        <label for="lastHiringDate">Dernière embauche</label>
+        <label for="lastHiringDate">{{ ui.addCompany.lastHiringDate }}</label>
         <input id="lastHiringDate" v-model="lastHiringDate" type="date" />
       </div>
 
       <button type="submit" class="submit-button" :disabled="isLoading">
-        {{ isLoading ? 'Ajout en cours...' : 'Ajouter l\'entreprise' }}
+        {{ isLoading ? ui.addCompany.adding : ui.addCompany.addButton }}
       </button>
     </form>
   </div>
