@@ -34,8 +34,12 @@ const emit = defineEmits(['close']);
 .modal-content {
   background: white;
   padding: 20px;
+  width: min(1280px, 94vw);
+  height: min(90vh, 940px);
+  max-height: 90vh;
   border-radius: 8px;
   position: relative;
+  overflow: auto;
 }
 .modal-close {
   color: var(--black);
@@ -47,5 +51,13 @@ const emit = defineEmits(['close']);
   font-size: 2rem;
   cursor: pointer;
   z-index: 10000 !important;
+}
+
+@media (max-width: 900px) {
+  .modal-content {
+    width: 96vw;
+    height: 90vh;
+    padding: 14px;
+  }
 }
 </style>

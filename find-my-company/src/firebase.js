@@ -1,11 +1,12 @@
-// Import the functions you need from the SDKs you need
+/**
+ * Configuration Firebase et initialisation
+ * Centralise la configuration de Firebase pour toute l'application
+ */
+
 import { initializeApp } from "firebase/app";
 import { getFirestore } from 'firebase/firestore'
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Configuration Firebase du projet
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "find-my-company-30652.firebaseapp.com",
@@ -16,7 +17,11 @@ const firebaseConfig = {
   measurementId: "G-LYWPQXCMYB"
 };
 
-// Initialize Firebase
+// Initialiser Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app)
-export { db }
+
+// Obtenir la référence à Firestore
+const db = getFirestore(app);
+
+// Exporter la base de données pour utilisation dans les services
+export { db };
