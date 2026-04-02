@@ -25,6 +25,7 @@ const isModalOpen = ref(false)
 const companies = ref([])
 const selectedSpeciality = ref('')
 const searchQuery = ref('') // Terme de recherche
+const language = ref('fr')
 
 // Options de spécialités disponibles
 const specialityOptions = [
@@ -152,7 +153,28 @@ onMounted(fetchCompanies)
 
       <!-- En-tête -->
       <hr class="separator" />
-      <h1>🏢 Find My Company</h1>
+      <h1>Find My Company</h1>
+
+      <!-- Sélecteur de langue -->
+      <div v-if="props.isOpen" class="language-switch" aria-label="Choix de la langue">
+        <button
+          class="lang-btn"
+          :class="{ active: language === 'fr' }"
+          @click="language = 'fr'"
+          type="button"
+        >
+          FR
+        </button>
+        <button
+          class="lang-btn"
+          :class="{ active: language === 'en' }"
+          @click="language = 'en'"
+          type="button"
+        >
+          EN
+        </button>
+      </div>
+
       <hr class="separator" />
 
       <!-- Barre de recherche -->
@@ -233,7 +255,7 @@ onMounted(fetchCompanies)
 
     <!-- Modale d'ajout d'entreprise -->
     <Modal :isOpen="isModalOpen" @close="closeModal">
-      <AddCompanyForm @refresh="fetchCompanies" @close="closeModal" />
+      <AddCompanyForm :language="language" @refresh="fetchCompanies" @close="closeModal" />
     </Modal>
 
     <!-- Bouton de basculement sidebar -->
@@ -273,6 +295,29 @@ h2 {
 .companies-title {
   border-bottom: 2px dotted var(--red-esigelec);
   padding-bottom: 8px;
+}
+
+.language-switch {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 6px 0 2px;
+}
+
+.lang-btn {
+  border: 1px solid var(--red-esigelec);
+  background: #fff;
+  color: var(--red-esigelec);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lang-btn.active {
+  background: var(--red-esigelec);
+  color: #fff;
 }
 
 /* ========== SÉPARATEURS ========== */

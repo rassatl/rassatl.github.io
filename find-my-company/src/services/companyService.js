@@ -115,6 +115,7 @@ export const createCompany = async (companyData) => {
     if (companyData.x === undefined || companyData.x === null || Number.isNaN(companyData.x)) {
       missingFields.push('x');
     }
+
     if (companyData.y === undefined || companyData.y === null || Number.isNaN(companyData.y)) {
       missingFields.push('y');
     }
