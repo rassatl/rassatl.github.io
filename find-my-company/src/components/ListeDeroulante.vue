@@ -1801,7 +1801,7 @@ h2 {
 .list-action {
   position: absolute;
   top: 0;
-  left: 30px;
+  left: 45px;
 }
 
 .connection-action {
