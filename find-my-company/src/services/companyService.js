@@ -59,6 +59,12 @@ const mapCompanyDoc = (snapshotDoc) => {
  * @property {Date} updatedAt - Date de modification
  * @property {string} website - Site web (optionnel)
  * @property {string} logo_url - URL du logo (optionnel)
+ * @property {string} tutorName - Nom du tuteur/tutrice (optionnel)
+ * @property {string} tutorEmail - Email du tuteur/tutrice (optionnel)
+ * @property {string} tutorPhone - Téléphone du tuteur/tutrice (optionnel)
+ * @property {string} hrName - Nom du/de la RH (optionnel)
+ * @property {string} hrEmail - Email du/de la RH (optionnel)
+ * @property {string} hrPhone - Téléphone du/de la RH (optionnel)
  */
 
 /**

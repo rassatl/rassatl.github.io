@@ -35,6 +35,12 @@ const sectors = ref([]);
 const lastHiringDate = ref('');
 const x = ref('');
 const y = ref('');
+const tutorName = ref('');
+const tutorEmail = ref('');
+const tutorPhone = ref('');
+const hrName = ref('');
+const hrEmail = ref('');
+const hrPhone = ref('');
 
 const isLoading = ref(false);
 const isGeocoding = ref(false);
@@ -263,6 +269,12 @@ const resetForm = () => {
   website.value = '';
   sectors.value = [];
   lastHiringDate.value = '';
+  tutorName.value = '';
+  tutorEmail.value = '';
+  tutorPhone.value = '';
+  hrName.value = '';
+  hrEmail.value = '';
+  hrPhone.value = '';
   if (marker) {
     map.removeLayer(marker);
     marker = null;
@@ -297,6 +309,12 @@ const submitForm = async () => {
       lastHiringDate: lastHiringDate.value || null,
       createdByUid: props.currentUser.uid,
       createdByEmail: props.currentUser.email || '',
+      tutorName: tutorName.value.trim(),
+      tutorEmail: tutorEmail.value.trim(),
+      tutorPhone: tutorPhone.value.trim(),
+      hrName: hrName.value.trim(),
+      hrEmail: hrEmail.value.trim(),
+      hrPhone: hrPhone.value.trim(),
     });
 
     resetForm();
@@ -469,6 +487,41 @@ const submitForm = async () => {
         <input id="lastHiringDate" v-model="lastHiringDate" type="date" />
       </div>
 
+      <hr class="separator" />
+      <h3>{{ ui.addCompany.internshipContacts }}</h3>
+
+      <div class="contact-block">
+        <h4>{{ ui.addCompany.tutor }}</h4>
+        <div class="form-group">
+          <label for="tutorName">{{ ui.addCompany.contactName }}</label>
+          <input id="tutorName" v-model="tutorName" type="text" :placeholder="ui.addCompany.contactNamePlaceholder" />
+        </div>
+        <div class="form-group">
+          <label for="tutorEmail">{{ ui.addCompany.contactEmail }}</label>
+          <input id="tutorEmail" v-model="tutorEmail" type="email" :placeholder="ui.addCompany.contactEmailPlaceholder" />
+        </div>
+        <div class="form-group">
+          <label for="tutorPhone">{{ ui.addCompany.contactPhone }}</label>
+          <input id="tutorPhone" v-model="tutorPhone" type="tel" :placeholder="ui.addCompany.contactPhonePlaceholder" />
+        </div>
+      </div>
+
+      <div class="contact-block">
+        <h4>{{ ui.addCompany.hr }}</h4>
+        <div class="form-group">
+          <label for="hrName">{{ ui.addCompany.contactName }}</label>
+          <input id="hrName" v-model="hrName" type="text" :placeholder="ui.addCompany.contactNamePlaceholder" />
+        </div>
+        <div class="form-group">
+          <label for="hrEmail">{{ ui.addCompany.contactEmail }}</label>
+          <input id="hrEmail" v-model="hrEmail" type="email" :placeholder="ui.addCompany.contactEmailPlaceholder" />
+        </div>
+        <div class="form-group">
+          <label for="hrPhone">{{ ui.addCompany.contactPhone }}</label>
+          <input id="hrPhone" v-model="hrPhone" type="tel" :placeholder="ui.addCompany.contactPhonePlaceholder" />
+        </div>
+      </div>
+
       <button type="submit" class="submit-button" :disabled="isLoading">
         {{ isLoading ? ui.addCompany.adding : ui.addCompany.addButton }}
       </button>
@@ -555,6 +608,19 @@ const submitForm = async () => {
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   min-width: 0;
+}
+
+.contact-block {
+  border: 1px solid var(--gray-white-light);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: rgba(220, 53, 69, 0.03);
+}
+
+.contact-block h4 {
+  margin: 0 0 14px;
+  color: var(--red-esigelec);
 }
 
 .coord-grid {

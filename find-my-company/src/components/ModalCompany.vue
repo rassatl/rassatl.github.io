@@ -1,14 +1,22 @@
 <script setup>
+import { computed } from 'vue';
+import { getI18n } from '../constants/i18n';
 
-defineProps({
+const props = defineProps({
   isOpen: Boolean,
   sidebarOffset: {
     type: Number,
     default: 0,
   },
+  language: {
+    type: String,
+    default: 'fr',
+  },
 });
 
 const emit = defineEmits(['close']);
+
+const ui = computed(() => getI18n(props.language));
 </script>
 
 <template>
@@ -29,7 +37,7 @@ const emit = defineEmits(['close']);
           width: `min(1280px, calc(100vw - ${sidebarOffset}px - 32px))`,
         }"
       >
-        <button class="modal-close" @click="emit('close')">×</button>
+        <button class="modal-close" :aria-label="ui.common.close" :title="ui.common.close" @click="emit('close')">×</button>
         <slot></slot>
       </div>
     </div>

@@ -96,6 +96,12 @@ const pendingEditForm = ref({
   pc: '',
   website: '',
   lastHiringDate: '',
+  tutorName: '',
+  tutorEmail: '',
+  tutorPhone: '',
+  hrName: '',
+  hrEmail: '',
+  hrPhone: '',
   description: '',
   sectorsText: '',
   x: '',
@@ -161,6 +167,12 @@ const pendingCompanyExtraEntries = computed(() => {
     'website',
     'logo_url',
     'lastHiringDate',
+    'tutorName',
+    'tutorEmail',
+    'tutorPhone',
+    'hrName',
+    'hrEmail',
+    'hrPhone',
     'createdAt',
     'updatedAt',
     'createdByEmail',
@@ -176,6 +188,22 @@ const pendingCompanyExtraEntries = computed(() => {
     .filter(([key]) => !hiddenKeys.has(key))
     .sort(([a], [b]) => a.localeCompare(b))
 })
+
+const formatTechnicalFieldLabel = (key) => {
+  const labelMap = {
+    id: ui.value.admin.identifier,
+    status: ui.value.admin.status,
+    createdByEmail: ui.value.admin.createdByEmail,
+    createdByUid: ui.value.admin.createdByUid,
+    createdAt: ui.value.admin.createdAt,
+    updatedAt: ui.value.admin.updatedAt,
+    validatedAt: ui.value.admin.validatedAt,
+    validatedByUid: ui.value.admin.validatedByUid,
+    validatedByEmail: ui.value.admin.validatedByEmail,
+  }
+
+  return labelMap[key] || key
+}
 
 const specialityOptions = computed(() => {
   return SPECIALITY_OPTIONS.map((option) => ({
@@ -541,6 +569,12 @@ const loadPendingEditForm = (company) => {
     pc: company?.pc || '',
     website: company?.website || '',
     lastHiringDate: normalizeDateInput(company?.lastHiringDate),
+    tutorName: company?.tutorName || '',
+    tutorEmail: company?.tutorEmail || '',
+    tutorPhone: company?.tutorPhone || '',
+    hrName: company?.hrName || '',
+    hrEmail: company?.hrEmail || '',
+    hrPhone: company?.hrPhone || '',
     description: company?.description || '',
     sectorsText: Array.isArray(company?.sectors) ? company.sectors.join(', ') : '',
     x: company?.x !== undefined && company?.x !== null ? String(company.x) : '',
@@ -609,6 +643,12 @@ const savePendingEdit = async () => {
       x: latitude,
       y: longitude,
       lastHiringDate: pendingEditForm.value.lastHiringDate || null,
+      tutorName: pendingEditForm.value.tutorName.trim(),
+      tutorEmail: pendingEditForm.value.tutorEmail.trim(),
+      tutorPhone: pendingEditForm.value.tutorPhone.trim(),
+      hrName: pendingEditForm.value.hrName.trim(),
+      hrEmail: pendingEditForm.value.hrEmail.trim(),
+      hrPhone: pendingEditForm.value.hrPhone.trim(),
     })
 
     await fetchCompanies()
@@ -1143,7 +1183,7 @@ onBeforeUnmount(() => {
               <strong>{{ company.name }}</strong>
               <small>{{ company.city }}, {{ company.country }}</small>
               <small>
-                {{ ui.admin.proposedBy }}: {{ company.createdByEmail || 'N/A' }}
+                {{ ui.admin.proposedBy }}: {{ company.createdByEmail || ui.companyInfo.notSpecified }}
               </small>
               <small v-if="company.createdAt">
                 {{ ui.admin.proposedAt }}: {{ new Date(company.createdAt).toLocaleDateString(props.language) }}
@@ -1258,7 +1298,7 @@ onBeforeUnmount(() => {
         <section class="pending-details-section">
           <h3>{{ ui.admin.generalInfo }}</h3>
           <div v-if="!isEditPendingMode" class="pending-details-grid">
-            <p><strong>ID:</strong> {{ selectedPendingCompany.id }}</p>
+            <p><strong>{{ ui.admin.identifier }}:</strong> {{ selectedPendingCompany.id }}</p>
             <p><strong>{{ ui.addCompany.name }}:</strong> {{ formatPendingValue(selectedPendingCompany.name) }}</p>
             <p><strong>{{ ui.companyInfo.speciality }}:</strong> {{ formatPendingValue(selectedPendingCompany.speciality) }}</p>
             <p><strong>{{ ui.companyInfo.address }}:</strong> {{ formatPendingValue(selectedPendingCompany.address) }}</p>
@@ -1267,7 +1307,13 @@ onBeforeUnmount(() => {
             <p><strong>{{ ui.companyInfo.postalCode }}:</strong> {{ formatPendingValue(selectedPendingCompany.pc) }}</p>
             <p><strong>{{ ui.companyInfo.website }}:</strong> {{ formatPendingValue(selectedPendingCompany.website) }}</p>
             <p><strong>{{ ui.companyInfo.lastHiringDate }}:</strong> {{ formatPendingDate(selectedPendingCompany.lastHiringDate) }}</p>
-            <p><strong>Status:</strong> {{ formatPendingValue(selectedPendingCompany.status) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactName }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorName) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorEmail) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactPhone }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorPhone) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactName }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrName) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrEmail) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactPhone }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrPhone) }}</p>
+            <p><strong>{{ ui.admin.status }}:</strong> {{ formatPendingValue(selectedPendingCompany.status) }}</p>
             <p><strong>{{ ui.admin.proposedBy }}:</strong> {{ formatPendingValue(selectedPendingCompany.createdByEmail) }}</p>
             <p><strong>{{ ui.admin.proposedAt }}:</strong> {{ formatPendingDate(selectedPendingCompany.createdAt) }}</p>
           </div>
@@ -1299,6 +1345,24 @@ onBeforeUnmount(() => {
             </label>
             <label>{{ ui.companyInfo.lastHiringDate }}
               <input v-model="pendingEditForm.lastHiringDate" type="date" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactName }}
+              <input v-model="pendingEditForm.tutorName" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactEmail }}
+              <input v-model="pendingEditForm.tutorEmail" type="email" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactPhone }}
+              <input v-model="pendingEditForm.tutorPhone" type="tel" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactName }}
+              <input v-model="pendingEditForm.hrName" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactEmail }}
+              <input v-model="pendingEditForm.hrEmail" type="email" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactPhone }}
+              <input v-model="pendingEditForm.hrPhone" type="tel" class="pending-edit-input" />
             </label>
             <label>{{ ui.addCompany.latitude }}
               <input v-model="pendingEditForm.x" type="number" step="any" class="pending-edit-input" />
@@ -1340,7 +1404,7 @@ onBeforeUnmount(() => {
           <h3>{{ ui.admin.technicalData }}</h3>
           <div v-if="pendingCompanyExtraEntries.length > 0" class="pending-extra-list">
             <p v-for="entry in pendingCompanyExtraEntries" :key="entry[0]">
-              <strong>{{ entry[0] }}:</strong> {{ formatPendingValue(entry[1]) }}
+              <strong>{{ formatTechnicalFieldLabel(entry[0]) }}:</strong> {{ formatPendingValue(entry[1]) }}
             </p>
           </div>
           <p v-else>{{ ui.companyInfo.notSpecified }}</p>
@@ -1348,7 +1412,27 @@ onBeforeUnmount(() => {
 
         <section v-if="!isEditPendingMode" class="pending-details-section">
           <h3>{{ ui.admin.rawData }}</h3>
-          <pre class="pending-raw-data">{{ JSON.stringify(selectedPendingCompany, null, 2) }}</pre>
+          <div class="pending-raw-data-list">
+            <p><strong>{{ ui.admin.identifier }}:</strong> {{ selectedPendingCompany.id }}</p>
+            <p><strong>{{ ui.addCompany.name }}:</strong> {{ formatPendingValue(selectedPendingCompany.name) }}</p>
+            <p><strong>{{ ui.companyInfo.speciality }}:</strong> {{ formatPendingValue(selectedPendingCompany.speciality) }}</p>
+            <p><strong>{{ ui.companyInfo.address }}:</strong> {{ formatPendingValue(selectedPendingCompany.address) }}</p>
+            <p><strong>{{ ui.companyInfo.city }}:</strong> {{ formatPendingValue(selectedPendingCompany.city) }}</p>
+            <p><strong>{{ ui.companyInfo.country }}:</strong> {{ formatPendingValue(selectedPendingCompany.country) }}</p>
+            <p><strong>{{ ui.companyInfo.postalCode }}:</strong> {{ formatPendingValue(selectedPendingCompany.pc) }}</p>
+            <p><strong>{{ ui.companyInfo.website }}:</strong> {{ formatPendingValue(selectedPendingCompany.website) }}</p>
+            <p><strong>{{ ui.companyInfo.lastHiringDate }}:</strong> {{ formatPendingDate(selectedPendingCompany.lastHiringDate) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactName }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorName) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorEmail) }}</p>
+            <p><strong>{{ ui.companyInfo.tutor }} {{ ui.companyInfo.contactPhone }}:</strong> {{ formatPendingValue(selectedPendingCompany.tutorPhone) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactName }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrName) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrEmail) }}</p>
+            <p><strong>{{ ui.companyInfo.hr }} {{ ui.companyInfo.contactPhone }}:</strong> {{ formatPendingValue(selectedPendingCompany.hrPhone) }}</p>
+            <p><strong>{{ ui.admin.status }}:</strong> {{ formatPendingValue(selectedPendingCompany.status) }}</p>
+            <p><strong>{{ ui.admin.createdByEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.createdByEmail) }}</p>
+            <p><strong>{{ ui.admin.validatedAt }}:</strong> {{ formatPendingDate(selectedPendingCompany.validatedAt) }}</p>
+            <p><strong>{{ ui.admin.validatedByEmail }}:</strong> {{ formatPendingValue(selectedPendingCompany.validatedByEmail) }}</p>
+          </div>
         </section>
       </div>
     </Modal>

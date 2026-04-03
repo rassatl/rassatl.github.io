@@ -107,6 +107,7 @@ const handleEdit = (company) => {
   <ModalCompany
     :isOpen="isModalOpen"
     :sidebarOffset="props.sidebarOpen ? 400 : 0"
+    :language="props.language"
     @close="closeModal"
   >
     <CompanyInformations

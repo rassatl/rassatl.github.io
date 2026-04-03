@@ -72,6 +72,35 @@ const specialityLabel = computed(() => {
   return getSpecialityLabel(props.company?.speciality, props.language, 'fullLabels');
 });
 
+const contactSections = computed(() => {
+  return [
+    {
+      key: 'tutor',
+      label: ui.value.companyInfo.tutor,
+      name: props.company?.tutorName,
+      email: props.company?.tutorEmail,
+      phone: props.company?.tutorPhone,
+    },
+    {
+      key: 'hr',
+      label: ui.value.companyInfo.hr,
+      name: props.company?.hrName,
+      email: props.company?.hrEmail,
+      phone: props.company?.hrPhone,
+    },
+  ];
+});
+
+const getEmailHref = (email) => {
+  if (!email?.trim()) return '';
+  return `mailto:${email.trim()}`;
+};
+
+const getPhoneHref = (phone) => {
+  if (!phone?.trim()) return '';
+  return `tel:${phone.trim().replace(/\s+/g, '')}`;
+};
+
 const getReviewerLabel = (rating) => {
   if (rating.reviewerName?.trim()) return rating.reviewerName;
   if (rating.reviewerFirstName || rating.reviewerLastName) {
@@ -173,6 +202,22 @@ const editCompanyHandler = () => {
             {{ getSectorLabel(sector, props.language) }}
           </span>
         </div>
+      </div>
+    </section>
+
+    <section v-if="contactSections.some((section) => section.name || section.email || section.phone)" class="info-section">
+      <h3>{{ ui.companyInfo.internshipContacts }}</h3>
+      <div v-for="section in contactSections" :key="section.key" class="contact-card">
+        <h4>{{ section.label }}</h4>
+        <p v-if="section.name"><strong>{{ ui.companyInfo.contactName }}:</strong> {{ section.name }}</p>
+        <p v-if="section.email">
+          <strong>{{ ui.companyInfo.contactEmail }}:</strong>
+          <a :href="getEmailHref(section.email)">{{ section.email }}</a>
+        </p>
+        <p v-if="section.phone">
+          <strong>{{ ui.companyInfo.contactPhone }}:</strong>
+          <a :href="getPhoneHref(section.phone)">{{ section.phone }}</a>
+        </p>
       </div>
     </section>
 
@@ -361,6 +406,26 @@ const editCompanyHandler = () => {
 
 .website-link a:hover {
   text-decoration: underline;
+}
+
+.contact-card {
+  border: 1px solid rgba(220, 53, 69, 0.12);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: rgba(220, 53, 69, 0.03);
+}
+
+.contact-card + .contact-card {
+  margin-top: 12px;
+}
+
+.contact-card h4 {
+  margin: 0 0 10px;
+  color: var(--red-esigelec);
+}
+
+.contact-card p {
+  margin: 6px 0;
 }
 
 .sectors {
