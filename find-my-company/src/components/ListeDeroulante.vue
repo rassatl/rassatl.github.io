@@ -63,7 +63,13 @@ const isModalOpen = ref(false)
 const companies = ref([])
 const pendingCompanies = ref([])
 const selectedSpeciality = ref('')
+const selectedCountry = ref('')
+const selectedSector = ref('')
+const selectedRating = ref('')
+const selectedCity = ref('')
+const modifiedRecentlyOnly = ref(false)
 const searchQuery = ref('') // Terme de recherche
+const isFiltersPanelOpen = ref(false)
 const showAuthPanel = ref(false)
 const showAdminPanel = ref(false)
 const authFirstName = ref('')
@@ -177,6 +183,89 @@ const specialityOptions = computed(() => {
     label: option.labels[props.language] || option.labels.fr
   }))
 })
+
+const countryOptions = computed(() => {
+  const countries = Array.from(
+    new Set(
+      companies.value
+        .map((company) => company.country)
+        .filter((country) => typeof country === 'string' && country.trim())
+        .map((country) => country.trim())
+    )
+  ).sort((a, b) => a.localeCompare(b, props.language))
+
+  return countries.map((country) => ({ value: country, label: country }))
+})
+
+const cityOptions = computed(() => {
+  const cities = Array.from(
+    new Set(
+      companies.value
+        .map((company) => company.city)
+        .filter((city) => typeof city === 'string' && city.trim())
+        .map((city) => city.trim())
+    )
+  ).sort((a, b) => a.localeCompare(b, props.language))
+
+  return cities.map((city) => ({ value: city, label: city }))
+})
+
+const sectorOptions = computed(() => {
+  const sectors = Array.from(
+    new Set(
+      companies.value
+        .flatMap((company) => (Array.isArray(company.sectors) ? company.sectors : []))
+        .filter((sector) => typeof sector === 'string' && sector.trim())
+        .map((sector) => sector.trim())
+    )
+  ).sort((a, b) => a.localeCompare(b, props.language))
+
+  return sectors.map((sector) => ({ value: sector, label: sector }))
+})
+
+const ratingOptions = computed(() => {
+  return [
+    { value: '', label: ui.value.sidebar.allRatings },
+    { value: '4.5', label: `${ui.value.sidebar.ratingAtLeast} 4.5` },
+    { value: '4', label: `${ui.value.sidebar.ratingAtLeast} 4` },
+    { value: '3', label: `${ui.value.sidebar.ratingAtLeast} 3` },
+  ]
+})
+
+const activeFiltersCount = computed(() => {
+  return [
+    selectedSpeciality.value,
+    selectedCountry.value,
+    selectedSector.value,
+    selectedRating.value,
+    selectedCity.value,
+    searchQuery.value.trim(),
+    modifiedRecentlyOnly.value,
+  ].filter(Boolean).length
+})
+
+const hasActiveFilters = computed(() => activeFiltersCount.value > 0)
+
+const toDateValue = (value) => {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const getCompanyAverageRating = (company) => {
+  if (!Array.isArray(company.studentRatings) || company.studentRatings.length === 0) {
+    return 0
+  }
+
+  const validRatings = company.studentRatings
+    .map((entry) => Number(entry?.rating))
+    .filter((rating) => Number.isFinite(rating))
+
+  if (validRatings.length === 0) return 0
+
+  const total = validRatings.reduce((sum, rating) => sum + rating, 0)
+  return total / validRatings.length
+}
 
 const normalizeEmail = (email) => email.trim().toLowerCase()
 
@@ -395,6 +484,11 @@ watch(
 const clearFilters = () => {
   searchQuery.value = ''
   selectedSpeciality.value = ''
+  selectedCountry.value = ''
+  selectedSector.value = ''
+  selectedRating.value = ''
+  selectedCity.value = ''
+  modifiedRecentlyOnly.value = false
   emit('update-speciality', '')
 }
 
@@ -619,6 +713,9 @@ const rejectPendingCompany = async (companyId) => {
  * 1. Filtrage par zone géographique visible (si disponible)
  * 2. Filtrage par spécialité
  * 3. Filtrage par recherche textuelle
+ * 4. Filtrage par pays, ville et secteur
+ * 5. Filtrage par date de modification
+ * 6. Filtrage par note moyenne
  */
 const filteredCompanies = computed(() => {
   // Étape 1: Utiliser soit les entreprises visibles sur la carte, soit toutes les entreprises
@@ -636,6 +733,36 @@ const filteredCompanies = computed(() => {
     result = searchCompanies(searchQuery.value, result)
   }
 
+  // Étape 4: Filtrer par pays, ville et secteur
+  if (selectedCountry.value) {
+    result = result.filter((company) => company.country === selectedCountry.value)
+  }
+
+  if (selectedCity.value) {
+    result = result.filter((company) => company.city === selectedCity.value)
+  }
+
+  if (selectedSector.value) {
+    result = result.filter((company) => Array.isArray(company.sectors) && company.sectors.includes(selectedSector.value))
+  }
+
+  // Étape 5: Filtrer sur les entreprises modifiées récemment
+  if (modifiedRecentlyOnly.value) {
+    const threshold = Date.now() - 30 * 24 * 60 * 60 * 1000
+    result = result.filter((company) => {
+      const updated = toDateValue(company.updatedAt)
+      const created = toDateValue(company.createdAt)
+      const referenceDate = updated || created
+      return referenceDate ? referenceDate.getTime() >= threshold : false
+    })
+  }
+
+  // Étape 6: Filtrer par note moyenne
+  if (selectedRating.value) {
+    const minRating = Number(selectedRating.value)
+    result = result.filter((company) => getCompanyAverageRating(company) >= minRating)
+  }
+
   return result
 })
 
@@ -643,14 +770,10 @@ const filteredCompanies = computed(() => {
  * Affiche les statistiques de la recherche
  */
 const searchStats = computed(() => {
-  const selectedLabel = specialityOptions.value.find(
-    (option) => option.value === selectedSpeciality.value
-  )?.label;
-
   return {
     total: companies.value.length,
     visible: filteredCompanies.value.length,
-    selected: selectedLabel || specialityOptions.value[0].label
+    activeFilters: activeFiltersCount.value,
   }
 })
 
@@ -903,32 +1026,93 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <!-- Filtres -->
-      <h2 v-if="props.isOpen" class="filter-title">{{ ui.sidebar.filters }}</h2>
-
-      <!-- Filtre par spécialité -->
-      <div v-if="props.isOpen" class="filter-bar">
-        <label for="speciality-select" class="filter-label">{{ ui.sidebar.speciality }}</label>
-        <select
-          id="speciality-select"
-          v-model="selectedSpeciality"
-          @change="$emit('update-speciality', selectedSpeciality)"
-          class="filter-select"
-          :aria-label="ui.sidebar.specialityAria"
+      <!-- Bandeau de filtres -->
+      <div v-if="props.isOpen" class="filters-band">
+        <button
+          class="filters-toggle"
+          type="button"
+          @click="isFiltersPanelOpen = !isFiltersPanelOpen"
+          :aria-expanded="String(isFiltersPanelOpen)"
+          :aria-controls="'filters-panel'"
         >
-          <option
-            v-for="opt in specialityOptions"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </option>
-        </select>
+          <span class="filters-toggle-title">{{ ui.sidebar.filters }}</span>
+          <span v-if="activeFiltersCount > 0" class="filters-toggle-count">
+            {{ activeFiltersCount }} {{ ui.sidebar.activeFilters }}
+          </span>
+          <span class="filters-toggle-icon" :class="{ open: isFiltersPanelOpen }" aria-hidden="true">▾</span>
+        </button>
+
+        <transition name="filters-slide">
+          <div v-if="isFiltersPanelOpen" id="filters-panel" class="filters-panel">
+            <div class="filter-bar">
+              <label for="speciality-select" class="filter-label">{{ ui.sidebar.speciality }}</label>
+              <select
+                id="speciality-select"
+                v-model="selectedSpeciality"
+                @change="$emit('update-speciality', selectedSpeciality)"
+                class="filter-select"
+                :aria-label="ui.sidebar.specialityAria"
+              >
+                <option
+                  v-for="opt in specialityOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="filter-bar">
+              <label for="country-select" class="filter-label">{{ ui.sidebar.country }}</label>
+              <select id="country-select" v-model="selectedCountry" class="filter-select" :aria-label="ui.sidebar.countryAria">
+                <option value="">{{ ui.sidebar.allCountries }}</option>
+                <option v-for="opt in countryOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="filter-bar">
+              <label for="sector-select" class="filter-label">{{ ui.sidebar.sectors }}</label>
+              <select id="sector-select" v-model="selectedSector" class="filter-select" :aria-label="ui.sidebar.sectorsAria">
+                <option value="">{{ ui.sidebar.allSectors }}</option>
+                <option v-for="opt in sectorOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="filter-bar">
+              <label for="rating-select" class="filter-label">{{ ui.sidebar.rating }}</label>
+              <select id="rating-select" v-model="selectedRating" class="filter-select" :aria-label="ui.sidebar.ratingAria">
+                <option v-for="opt in ratingOptions" :key="opt.value || 'all-ratings'" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="filter-bar">
+              <label for="city-select" class="filter-label">{{ ui.sidebar.city }}</label>
+              <select id="city-select" v-model="selectedCity" class="filter-select" :aria-label="ui.sidebar.cityAria">
+                <option value="">{{ ui.sidebar.allCities }}</option>
+                <option v-for="opt in cityOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <label class="filter-checkbox">
+              <input v-model="modifiedRecentlyOnly" type="checkbox" />
+              <span>{{ ui.sidebar.recentlyUpdated }}</span>
+            </label>
+          </div>
+        </transition>
       </div>
 
       <!-- Bouton réinitialiser filtres -->
       <button
-        v-if="props.isOpen && (selectedSpeciality || searchQuery)"
+        v-if="props.isOpen && hasActiveFilters"
         @click="clearFilters"
         class="btn-clear-filters"
       >
@@ -939,7 +1123,7 @@ onBeforeUnmount(() => {
       <div v-if="props.isOpen && companies.length > 0" class="search-stats">
         <small>
           {{ filteredCompanies.length }} / {{ companies.length }} {{ ui.sidebar.companies }}
-          <span v-if="selectedSpeciality" class="badge">{{ searchStats.selected }}</span>
+          <span v-if="searchStats.activeFilters > 0" class="badge">{{ searchStats.activeFilters }} {{ ui.sidebar.activeFilters }}</span>
         </small>
       </div>
 
@@ -1196,11 +1380,6 @@ h2 {
   color: var(--red-esigelec);
   margin: 15px 0 10px 0;
   font-size: 1.1rem;
-}
-
-.filter-title {
-  border-bottom: 2px solid var(--red-esigelec);
-  padding-bottom: 8px;
 }
 
 .companies-title {
@@ -1732,8 +1911,66 @@ h2 {
 }
 
 /* ========== FILTRES ========== */
+.filters-band {
+  margin-bottom: 12px;
+}
+
+.filters-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px solid var(--red-esigelec);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #f9f9f9);
+  color: var(--red-esigelec);
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.filters-toggle:hover {
+  background: #fff3f5;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.12);
+}
+
+.filters-toggle-title {
+  flex: 1;
+  text-align: left;
+}
+
+.filters-toggle-count {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--red-esigelec);
+  color: #fff;
+}
+
+.filters-toggle-icon {
+  font-size: 16px;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+
+.filters-toggle-icon.open {
+  transform: rotate(180deg);
+}
+
+.filters-panel {
+  border: 1px solid #ececec;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  padding: 12px;
+  background: #ffffff;
+  display: grid;
+  gap: 10px;
+  margin-top: -2px;
+}
+
 .filter-bar {
-  margin-bottom: 15px;
+  margin-bottom: 0;
 }
 
 .filter-label {
@@ -1759,6 +1996,30 @@ h2 {
 .filter-select:focus {
   outline: none;
   border-color: #ff6b6b;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.filter-checkbox input {
+  accent-color: var(--red-esigelec);
+}
+
+.filters-slide-enter-active,
+.filters-slide-leave-active {
+  transition: all 0.2s ease;
+}
+
+.filters-slide-enter-from,
+.filters-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .btn-clear-filters {
