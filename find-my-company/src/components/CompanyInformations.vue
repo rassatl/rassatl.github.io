@@ -17,6 +17,14 @@ const props = defineProps({
   language: {
     type: String,
     default: 'fr'
+  },
+  currentUser: {
+    type: Object,
+    default: null,
+  },
+  currentUserProfile: {
+    type: Object,
+    default: null,
   }
 });
 
@@ -64,6 +72,14 @@ const specialityLabel = computed(() => {
   return getSpecialityLabel(props.company?.speciality, props.language, 'fullLabels');
 });
 
+const getReviewerLabel = (rating) => {
+  if (rating.reviewerName?.trim()) return rating.reviewerName;
+  if (rating.reviewerFirstName || rating.reviewerLastName) {
+    return `${rating.reviewerFirstName || ''} ${rating.reviewerLastName || ''}`.trim();
+  }
+  return ui.value.companyInfo.reviewerUnknown;
+};
+
 const submitRating = async () => {
   if (!studentComment.value.trim()) {
     ratingMessage.value = ui.value.companyInfo.commentRequired;
@@ -73,7 +89,27 @@ const submitRating = async () => {
   try {
     isSubmittingRating.value = true;
     ratingMessage.value = '';
-    await addStudentRating(props.company.id, studentRating.value, studentComment.value);
+
+    const profileFirstName = props.currentUserProfile?.firstName?.trim() || '';
+    const profileLastName = props.currentUserProfile?.lastName?.trim() || '';
+    const profileDisplayName = props.currentUserProfile?.displayName?.trim() || '';
+    const fallbackDisplayName = props.currentUser?.displayName?.trim() || '';
+
+    const reviewerFirstName = profileFirstName;
+    const reviewerLastName = profileLastName;
+    const reviewerName = `${profileFirstName} ${profileLastName}`.trim() || profileDisplayName || fallbackDisplayName;
+
+    await addStudentRating(
+      props.company.id,
+      studentRating.value,
+      studentComment.value,
+      {
+        uid: props.currentUser?.uid || null,
+        reviewerName,
+        reviewerFirstName,
+        reviewerLastName,
+      }
+    );
     studentComment.value = '';
     studentRating.value = 5;
     showRatingForm.value = false;
@@ -175,6 +211,9 @@ const editCompanyHandler = () => {
             <span class="stars">{{ '⭐'.repeat(rating.rating) }}</span>
             <span class="date">{{ formatDate(rating.date) }}</span>
           </div>
+          <p class="reviewer">
+            <strong>{{ ui.companyInfo.reviewer }}:</strong> {{ getReviewerLabel(rating) }}
+          </p>
           <p class="comment">{{ rating.comment }}</p>
         </div>
       </div>
@@ -425,6 +464,12 @@ const editCompanyHandler = () => {
   margin: 0;
   color: #333;
   line-height: 1.5;
+}
+
+.rating-item .reviewer {
+  margin: 0 0 6px;
+  color: #555;
+  font-size: 13px;
 }
 
 .add-rating-button {

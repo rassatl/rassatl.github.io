@@ -6,13 +6,17 @@
  * Permet l'ajout/suppression d'entreprises via une modale
  */
 
-import { onMounted, ref, computed, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, computed, watch, nextTick } from 'vue'
 import {
   approveCompany,
+  rejectCompany,
+  updateCompany,
   getPendingCompanies,
   getPublicCompanies,
   searchCompanies,
 } from '../services/companyService'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import Modal from './Modal.vue'
 import AddCompanyForm from './AddCompanyForm.vue'
 import ListCompanies from './ListCompanies.vue'
@@ -21,8 +25,10 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
 } from 'firebase/auth'
 import { auth } from '../firebase'
+import { upsertUserProfile } from '../services/userProfileService'
 
 // Props et événements
 const props = defineProps({
@@ -37,6 +43,10 @@ const props = defineProps({
     default: 0,
   },
   currentUser: {
+    type: Object,
+    default: null,
+  },
+  currentUserProfile: {
     type: Object,
     default: null,
   },
@@ -56,14 +66,39 @@ const selectedSpeciality = ref('')
 const searchQuery = ref('') // Terme de recherche
 const showAuthPanel = ref(false)
 const showAdminPanel = ref(false)
+const authFirstName = ref('')
+const authLastName = ref('')
 const authEmail = ref('')
 const authPassword = ref('')
 const isRegisterMode = ref(false)
 const authLoading = ref(false)
 const authError = ref('')
 const pendingActionCompanyId = ref('')
+const pendingRejectCompanyId = ref('')
 const adminMessage = ref('')
 const adminError = ref('')
+const selectedPendingCompany = ref(null)
+const isPendingDetailsOpen = ref(false)
+const isEditPendingMode = ref(false)
+const pendingEditLoading = ref(false)
+const pendingEditForm = ref({
+  name: '',
+  speciality: '',
+  address: '',
+  city: '',
+  country: '',
+  pc: '',
+  website: '',
+  lastHiringDate: '',
+  description: '',
+  sectorsText: '',
+  x: '',
+  y: '',
+})
+const pendingMapContainer = ref(null)
+
+let pendingMap = null
+let pendingMapMarker = null
 
 const ui = computed(() => getI18n(props.language))
 
@@ -73,9 +108,68 @@ const roleLabel = computed(() => {
   return ui.value.auth.guest
 })
 
+const connectedAccountLabel = computed(() => {
+  if (!props.currentUser) return ''
+
+  const firstName = props.currentUserProfile?.firstName?.trim() || ''
+  const lastName = props.currentUserProfile?.lastName?.trim() || ''
+  const profileDisplayName = `${firstName} ${lastName}`.trim()
+
+  if (profileDisplayName) return profileDisplayName
+  if (props.currentUserProfile?.displayName?.trim()) return props.currentUserProfile.displayName
+  if (props.currentUser.displayName?.trim()) return props.currentUser.displayName
+
+  return ui.value.auth.connectedUserFallback
+})
+
 const canCreateCompany = computed(() => props.userRole === 'user' || props.userRole === 'admin')
 
 const isAdmin = computed(() => props.userRole === 'admin')
+
+const pendingCompanyCoordinatesValid = computed(() => {
+  const latitude = Number(isEditPendingMode.value ? pendingEditForm.value.x : selectedPendingCompany.value?.x)
+  const longitude = Number(isEditPendingMode.value ? pendingEditForm.value.y : selectedPendingCompany.value?.y)
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+})
+
+const adminEditableSpecialityOptions = computed(() => {
+  return specialityOptions.value.filter((option) => option.value !== '')
+})
+
+const pendingCompanyExtraEntries = computed(() => {
+  const company = selectedPendingCompany.value
+  if (!company) return []
+
+  const hiddenKeys = new Set([
+    'id',
+    'name',
+    'speciality',
+    'address',
+    'city',
+    'country',
+    'pc',
+    'x',
+    'y',
+    'description',
+    'sectors',
+    'website',
+    'logo_url',
+    'lastHiringDate',
+    'createdAt',
+    'updatedAt',
+    'createdByEmail',
+    'createdByUid',
+    'status',
+    'validatedAt',
+    'validatedByUid',
+    'validatedByEmail',
+    'studentRatings',
+  ])
+
+  return Object.entries(company)
+    .filter(([key]) => !hiddenKeys.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+})
 
 const specialityOptions = computed(() => {
   return SPECIALITY_OPTIONS.map((option) => ({
@@ -83,6 +177,25 @@ const specialityOptions = computed(() => {
     label: option.labels[props.language] || option.labels.fr
   }))
 })
+
+const normalizeEmail = (email) => email.trim().toLowerCase()
+
+const isValidEmail = (email) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+const mapAuthError = (error) => {
+  const code = error?.code || ''
+
+  if (code === 'auth/invalid-email') return ui.value.auth.invalidEmail
+  if (code === 'auth/email-already-in-use') return ui.value.auth.emailAlreadyInUse
+  if (code === 'auth/user-not-found') return ui.value.auth.invalidCredentials
+  if (code === 'auth/wrong-password') return ui.value.auth.invalidCredentials
+  if (code === 'auth/invalid-credential') return ui.value.auth.invalidCredentials
+  if (code === 'auth/weak-password') return ui.value.auth.weakPassword
+
+  return ui.value.auth.authError
+}
 
 /**
  * Ouvre la modale d'ajout d'entreprise
@@ -172,18 +285,47 @@ const handleAuthSubmit = async () => {
     return
   }
 
+  if (isRegisterMode.value && (!authFirstName.value.trim() || !authLastName.value.trim())) {
+    authError.value = ui.value.auth.nameRequired
+    return
+  }
+
+  const email = normalizeEmail(authEmail.value)
+  if (!isValidEmail(email)) {
+    authError.value = ui.value.auth.invalidEmail
+    return
+  }
+
   try {
     authLoading.value = true
     if (isRegisterMode.value) {
-      await createUserWithEmailAndPassword(auth, authEmail.value.trim(), authPassword.value)
+      const userCredential = await createUserWithEmailAndPassword(auth, email, authPassword.value)
+      const firstName = authFirstName.value.trim()
+      const lastName = authLastName.value.trim()
+      const fullName = `${firstName} ${lastName}`.trim()
+
+      if (fullName) {
+        await updateProfile(userCredential.user, { displayName: fullName })
+      }
+
+      await upsertUserProfile({
+        uid: userCredential.user.uid,
+        email,
+        firstName,
+        lastName,
+        displayName: fullName,
+      })
     } else {
-      await signInWithEmailAndPassword(auth, authEmail.value.trim(), authPassword.value)
+      await signInWithEmailAndPassword(auth, email, authPassword.value)
     }
+    authFirstName.value = ''
+    authLastName.value = ''
+    authEmail.value = email
     authPassword.value = ''
     showAuthPanel.value = false
   } catch (error) {
     console.error('❌ Erreur auth:', error)
-    authError.value = error.message || ui.value.auth.authError
+    authError.value = mapAuthError(error)
   } finally {
     authLoading.value = false
   }
@@ -197,6 +339,8 @@ const handleLogout = async () => {
 
   try {
     await signOut(auth)
+    authFirstName.value = ''
+    authLastName.value = ''
     authPassword.value = ''
     adminMessage.value = ''
     showAuthPanel.value = false
@@ -252,6 +396,221 @@ const clearFilters = () => {
   searchQuery.value = ''
   selectedSpeciality.value = ''
   emit('update-speciality', '')
+}
+
+const formatPendingValue = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return ui.value.companyInfo.notSpecified
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return ui.value.companyInfo.notSpecified
+    return value.join(', ')
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleDateString(props.language)
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
+  }
+
+  return String(value)
+}
+
+const formatPendingDate = (value) => {
+  if (!value) return ui.value.companyInfo.notSpecified
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ui.value.companyInfo.notSpecified
+  }
+
+  return date.toLocaleDateString(props.language)
+}
+
+const normalizeDateInput = (value) => {
+  if (!value) return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+const loadPendingEditForm = (company) => {
+  pendingEditForm.value = {
+    name: company?.name || '',
+    speciality: company?.speciality || '',
+    address: company?.address || '',
+    city: company?.city || '',
+    country: company?.country || '',
+    pc: company?.pc || '',
+    website: company?.website || '',
+    lastHiringDate: normalizeDateInput(company?.lastHiringDate),
+    description: company?.description || '',
+    sectorsText: Array.isArray(company?.sectors) ? company.sectors.join(', ') : '',
+    x: company?.x !== undefined && company?.x !== null ? String(company.x) : '',
+    y: company?.y !== undefined && company?.y !== null ? String(company.y) : '',
+  }
+}
+
+const openPendingDetails = async (company) => {
+  if (props.isOpen) {
+    emit('toggle')
+  }
+  isEditPendingMode.value = false
+  selectedPendingCompany.value = company
+  loadPendingEditForm(company)
+  isPendingDetailsOpen.value = true
+  await initPendingMap()
+}
+
+const openPendingEdit = async (company) => {
+  await openPendingDetails(company)
+  isEditPendingMode.value = true
+}
+
+const cancelPendingEdit = () => {
+  isEditPendingMode.value = false
+  if (selectedPendingCompany.value) {
+    loadPendingEditForm(selectedPendingCompany.value)
+  }
+}
+
+const savePendingEdit = async () => {
+  if (!selectedPendingCompany.value?.id || !isAdmin.value) return
+
+  if (!pendingEditForm.value.name.trim() || !pendingEditForm.value.speciality.trim() || !pendingEditForm.value.address.trim() || !pendingEditForm.value.city.trim() || !pendingEditForm.value.country.trim() || !pendingEditForm.value.pc.trim()) {
+    adminError.value = ui.value.admin.editValidationError
+    return
+  }
+
+  const latitude = Number.parseFloat(pendingEditForm.value.x)
+  const longitude = Number.parseFloat(pendingEditForm.value.y)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    adminError.value = ui.value.addCompany.invalidCoordinates
+    return
+  }
+
+  const sectors = pendingEditForm.value.sectorsText
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  adminError.value = ''
+  adminMessage.value = ''
+
+  try {
+    pendingEditLoading.value = true
+    await updateCompany(selectedPendingCompany.value.id, {
+      name: pendingEditForm.value.name.trim(),
+      speciality: pendingEditForm.value.speciality,
+      address: pendingEditForm.value.address.trim(),
+      city: pendingEditForm.value.city.trim(),
+      country: pendingEditForm.value.country.trim(),
+      pc: pendingEditForm.value.pc.trim(),
+      website: pendingEditForm.value.website.trim(),
+      description: pendingEditForm.value.description.trim(),
+      sectors,
+      x: latitude,
+      y: longitude,
+      lastHiringDate: pendingEditForm.value.lastHiringDate || null,
+    })
+
+    await fetchCompanies()
+    await fetchPendingCompaniesForAdmin()
+    const refreshed = pendingCompanies.value.find((company) => company.id === selectedPendingCompany.value.id)
+    if (refreshed) {
+      selectedPendingCompany.value = refreshed
+      loadPendingEditForm(refreshed)
+    }
+    isEditPendingMode.value = false
+    adminMessage.value = ui.value.admin.editSuccess
+    emit('data-changed')
+  } catch (error) {
+    console.error('❌ Erreur édition admin:', error)
+    adminError.value = error.message || ui.value.admin.approveError
+  } finally {
+    pendingEditLoading.value = false
+  }
+}
+
+const closePendingDetails = () => {
+  isPendingDetailsOpen.value = false
+  isEditPendingMode.value = false
+  selectedPendingCompany.value = null
+  destroyPendingMap()
+}
+
+const destroyPendingMap = () => {
+  if (pendingMap) {
+    pendingMap.remove()
+    pendingMap = null
+    pendingMapMarker = null
+  }
+}
+
+const initPendingMap = async () => {
+  if (!isPendingDetailsOpen.value || !pendingCompanyCoordinatesValid.value) {
+    destroyPendingMap()
+    return
+  }
+
+  await nextTick()
+
+  if (!pendingMapContainer.value) return
+
+  const latitude = Number(isEditPendingMode.value ? pendingEditForm.value.x : selectedPendingCompany.value.x)
+  const longitude = Number(isEditPendingMode.value ? pendingEditForm.value.y : selectedPendingCompany.value.y)
+
+  if (!pendingMap) {
+    pendingMap = L.map(pendingMapContainer.value, {
+      center: [latitude, longitude],
+      zoom: 14,
+      minZoom: 3,
+    })
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(pendingMap)
+  }
+
+  pendingMap.setView([latitude, longitude], 14)
+
+  if (pendingMapMarker) {
+    pendingMapMarker.setLatLng([latitude, longitude])
+  } else {
+    pendingMapMarker = L.marker([latitude, longitude]).addTo(pendingMap)
+  }
+
+  pendingMapMarker.bindPopup(selectedPendingCompany.value.name || ui.value.admin.detailsTitle)
+  pendingMap.invalidateSize()
+}
+
+const rejectPendingCompany = async (companyId) => {
+  if (!props.currentUser?.uid || !isAdmin.value) return
+  if (!window.confirm(ui.value.admin.confirmReject)) return
+
+  adminError.value = ''
+  adminMessage.value = ''
+  pendingRejectCompanyId.value = companyId
+
+  try {
+    await rejectCompany(companyId, props.currentUser)
+    adminMessage.value = ui.value.admin.rejectedSuccess
+    if (selectedPendingCompany.value?.id === companyId) {
+      closePendingDetails()
+    }
+    await fetchCompanies()
+    await fetchPendingCompaniesForAdmin()
+    emit('data-changed')
+  } catch (error) {
+    console.error('❌ Erreur refus admin:', error)
+    adminError.value = error.message || ui.value.admin.rejectError
+  } finally {
+    pendingRejectCompanyId.value = ''
+  }
 }
 
 /**
@@ -323,6 +682,26 @@ watch(
     await fetchPendingCompaniesForAdmin()
   }
 )
+
+watch(
+  () => selectedPendingCompany.value,
+  async () => {
+    if (!isPendingDetailsOpen.value) return
+    await initPendingMap()
+  }
+)
+
+watch(
+  () => [pendingEditForm.value.x, pendingEditForm.value.y, isEditPendingMode.value],
+  async () => {
+    if (!isPendingDetailsOpen.value || !isEditPendingMode.value) return
+    await initPendingMap()
+  }
+)
+
+onBeforeUnmount(() => {
+  destroyPendingMap()
+})
 </script>
 
 <template>
@@ -434,6 +813,14 @@ watch(
       <hr class="separator" />
       <h1>Find My Company</h1>
 
+      <div v-if="props.isOpen && props.currentUser" class="session-indicator">
+        <span class="session-dot" aria-hidden="true"></span>
+        <span class="session-text">
+          {{ ui.auth.connectedAs }}: {{ connectedAccountLabel }}
+        </span>
+        <span v-if="props.userRole === 'admin'" class="session-role">{{ roleLabel }}</span>
+      </div>
+
       <div v-if="props.isOpen && showAuthPanel" class="auth-panel">
         <div class="role-badge" :class="props.userRole">
           {{ roleLabel }}
@@ -448,6 +835,20 @@ watch(
 
         <template v-else>
           <div class="auth-fields">
+            <template v-if="isRegisterMode">
+              <input
+                v-model="authFirstName"
+                type="text"
+                :placeholder="ui.auth.firstName"
+                class="auth-input"
+              />
+              <input
+                v-model="authLastName"
+                type="text"
+                :placeholder="ui.auth.lastName"
+                class="auth-input"
+              />
+            </template>
             <input
               v-model="authEmail"
               type="email"
@@ -564,14 +965,38 @@ watch(
                 {{ ui.admin.proposedAt }}: {{ new Date(company.createdAt).toLocaleDateString(props.language) }}
               </small>
             </div>
-            <button
-              class="approve-btn"
-              type="button"
-              :disabled="pendingActionCompanyId === company.id"
-              @click="approvePendingCompany(company.id)"
-            >
-              {{ pendingActionCompanyId === company.id ? ui.admin.approving : ui.admin.approve }}
-            </button>
+            <div class="pending-actions">
+              <button
+                class="details-btn"
+                type="button"
+                @click="openPendingDetails(company)"
+              >
+                {{ ui.admin.viewDetails }}
+              </button>
+              <button
+                class="edit-btn"
+                type="button"
+                @click="openPendingEdit(company)"
+              >
+                {{ ui.admin.edit }}
+              </button>
+              <button
+                class="approve-btn"
+                type="button"
+                :disabled="pendingActionCompanyId === company.id"
+                @click="approvePendingCompany(company.id)"
+              >
+                {{ pendingActionCompanyId === company.id ? ui.admin.approving : ui.admin.approve }}
+              </button>
+              <button
+                class="reject-btn"
+                type="button"
+                :disabled="pendingRejectCompanyId === company.id"
+                @click="rejectPendingCompany(company.id)"
+              >
+                {{ pendingRejectCompanyId === company.id ? ui.admin.rejecting : ui.admin.reject }}
+              </button>
+            </div>
           </li>
         </ul>
       </div>
@@ -595,6 +1020,8 @@ watch(
         :companies="filteredCompanies"
         :sidebarOpen="props.isOpen"
         :language="props.language"
+        :currentUser="props.currentUser"
+        :currentUserProfile="props.currentUserProfile"
       />
     </div>
 
@@ -606,6 +1033,140 @@ watch(
         @refresh="handleCompanyCreated"
         @close="closeModal"
       />
+    </Modal>
+
+    <Modal
+      :isOpen="isPendingDetailsOpen"
+      @close="closePendingDetails"
+    >
+      <div v-if="selectedPendingCompany" class="pending-details-content">
+        <h2>{{ isEditPendingMode ? ui.admin.editTitle : ui.admin.detailsTitle }}</h2>
+
+        <div class="pending-modal-actions">
+          <button
+            v-if="!isEditPendingMode"
+            class="edit-btn"
+            type="button"
+            @click="isEditPendingMode = true"
+          >
+            {{ ui.admin.edit }}
+          </button>
+          <template v-else>
+            <button
+              class="approve-btn"
+              type="button"
+              :disabled="pendingEditLoading"
+              @click="savePendingEdit"
+            >
+              {{ pendingEditLoading ? ui.admin.editing : ui.admin.saveChanges }}
+            </button>
+            <button
+              class="details-btn"
+              type="button"
+              :disabled="pendingEditLoading"
+              @click="cancelPendingEdit"
+            >
+              {{ ui.admin.cancelEdit }}
+            </button>
+          </template>
+        </div>
+
+        <section class="pending-details-section">
+          <h3>{{ ui.admin.generalInfo }}</h3>
+          <div v-if="!isEditPendingMode" class="pending-details-grid">
+            <p><strong>ID:</strong> {{ selectedPendingCompany.id }}</p>
+            <p><strong>{{ ui.addCompany.name }}:</strong> {{ formatPendingValue(selectedPendingCompany.name) }}</p>
+            <p><strong>{{ ui.companyInfo.speciality }}:</strong> {{ formatPendingValue(selectedPendingCompany.speciality) }}</p>
+            <p><strong>{{ ui.companyInfo.address }}:</strong> {{ formatPendingValue(selectedPendingCompany.address) }}</p>
+            <p><strong>{{ ui.companyInfo.city }}:</strong> {{ formatPendingValue(selectedPendingCompany.city) }}</p>
+            <p><strong>{{ ui.companyInfo.country }}:</strong> {{ formatPendingValue(selectedPendingCompany.country) }}</p>
+            <p><strong>{{ ui.companyInfo.postalCode }}:</strong> {{ formatPendingValue(selectedPendingCompany.pc) }}</p>
+            <p><strong>{{ ui.companyInfo.website }}:</strong> {{ formatPendingValue(selectedPendingCompany.website) }}</p>
+            <p><strong>{{ ui.companyInfo.lastHiringDate }}:</strong> {{ formatPendingDate(selectedPendingCompany.lastHiringDate) }}</p>
+            <p><strong>Status:</strong> {{ formatPendingValue(selectedPendingCompany.status) }}</p>
+            <p><strong>{{ ui.admin.proposedBy }}:</strong> {{ formatPendingValue(selectedPendingCompany.createdByEmail) }}</p>
+            <p><strong>{{ ui.admin.proposedAt }}:</strong> {{ formatPendingDate(selectedPendingCompany.createdAt) }}</p>
+          </div>
+          <div v-else class="pending-edit-grid">
+            <label>{{ ui.addCompany.name }}
+              <input v-model="pendingEditForm.name" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.speciality }}
+              <select v-model="pendingEditForm.speciality" class="pending-edit-input">
+                <option v-for="opt in adminEditableSpecialityOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </label>
+            <label>{{ ui.companyInfo.address }}
+              <input v-model="pendingEditForm.address" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.city }}
+              <input v-model="pendingEditForm.city" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.country }}
+              <input v-model="pendingEditForm.country" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.postalCode }}
+              <input v-model="pendingEditForm.pc" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.website }}
+              <input v-model="pendingEditForm.website" type="text" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.companyInfo.lastHiringDate }}
+              <input v-model="pendingEditForm.lastHiringDate" type="date" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.addCompany.latitude }}
+              <input v-model="pendingEditForm.x" type="number" step="any" class="pending-edit-input" />
+            </label>
+            <label>{{ ui.addCompany.longitude }}
+              <input v-model="pendingEditForm.y" type="number" step="any" class="pending-edit-input" />
+            </label>
+            <label class="pending-edit-full">{{ ui.companyInfo.sectors }}
+              <input v-model="pendingEditForm.sectorsText" type="text" class="pending-edit-input" placeholder="Technologie, Sante" />
+            </label>
+            <label class="pending-edit-full">{{ ui.companyInfo.description }}
+              <textarea v-model="pendingEditForm.description" rows="4" class="pending-edit-input"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <section v-if="!isEditPendingMode" class="pending-details-section">
+          <h3>{{ ui.companyInfo.description }}</h3>
+          <p>{{ formatPendingValue(selectedPendingCompany.description) }}</p>
+        </section>
+
+        <section v-if="!isEditPendingMode" class="pending-details-section">
+          <h3>{{ ui.companyInfo.sectors }}</h3>
+          <p>{{ formatPendingValue(selectedPendingCompany.sectors) }}</p>
+        </section>
+
+        <section class="pending-details-section">
+          <h3>{{ ui.admin.locationPreview }}</h3>
+          <p>
+            <strong>{{ ui.addCompany.latitude }}:</strong> {{ formatPendingValue(isEditPendingMode ? pendingEditForm.x : selectedPendingCompany.x) }}
+            |
+            <strong>{{ ui.addCompany.longitude }}:</strong> {{ formatPendingValue(isEditPendingMode ? pendingEditForm.y : selectedPendingCompany.y) }}
+          </p>
+          <div v-if="pendingCompanyCoordinatesValid" ref="pendingMapContainer" class="pending-map"></div>
+          <p v-else class="admin-error">{{ ui.admin.coordinatesUnavailable }}</p>
+        </section>
+
+        <section v-if="!isEditPendingMode" class="pending-details-section">
+          <h3>{{ ui.admin.technicalData }}</h3>
+          <div v-if="pendingCompanyExtraEntries.length > 0" class="pending-extra-list">
+            <p v-for="entry in pendingCompanyExtraEntries" :key="entry[0]">
+              <strong>{{ entry[0] }}:</strong> {{ formatPendingValue(entry[1]) }}
+            </p>
+          </div>
+          <p v-else>{{ ui.companyInfo.notSpecified }}</p>
+        </section>
+
+        <section v-if="!isEditPendingMode" class="pending-details-section">
+          <h3>{{ ui.admin.rawData }}</h3>
+          <pre class="pending-raw-data">{{ JSON.stringify(selectedPendingCompany, null, 2) }}</pre>
+        </section>
+      </div>
     </Modal>
 
     <!-- Bouton de basculement sidebar -->
@@ -682,6 +1243,44 @@ h2 {
   padding: 10px;
   margin-top: 8px;
   background: #fafafa;
+}
+
+.session-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  background: #f8fafc;
+  margin: 8px 0 6px;
+}
+
+.session-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1fa35b;
+  flex-shrink: 0;
+}
+
+.session-text {
+  font-size: 12px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.session-role {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--red-esigelec);
+  border: 1px solid rgba(220, 53, 69, 0.25);
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
 }
 
 .role-badge {
@@ -807,6 +1406,13 @@ h2 {
   gap: 8px;
 }
 
+.pending-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .pending-main {
   display: flex;
   flex-direction: column;
@@ -828,6 +1434,149 @@ h2 {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.details-btn {
+  border: 1px solid #1565c0;
+  border-radius: 6px;
+  background: #e3f2fd;
+  color: #0d47a1;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.details-btn:hover {
+  background: #d4e9ff;
+}
+
+.edit-btn {
+  border: 1px solid #ef6c00;
+  border-radius: 6px;
+  background: #fff3e0;
+  color: #bf360c;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.edit-btn:hover {
+  background: #ffe7cc;
+}
+
+.reject-btn {
+  border: none;
+  border-radius: 6px;
+  background: #c62828;
+  color: #fff;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reject-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pending-details-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--black);
+}
+
+.pending-modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pending-details-section {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fafafa;
+  color: var(--black);
+}
+
+.pending-details-section h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: var(--red-esigelec);
+}
+
+.pending-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 14px;
+}
+
+.pending-details-grid p,
+.pending-extra-list p {
+  margin: 0;
+  font-size: 14px;
+  word-break: break-word;
+  color: var(--black);
+}
+
+.pending-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 14px;
+}
+
+.pending-edit-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--black);
+}
+
+.pending-edit-full {
+  grid-column: 1 / -1;
+}
+
+.pending-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--black);
+  font-size: 14px;
+}
+
+.pending-edit-input:focus {
+  outline: none;
+  border-color: var(--red-esigelec);
+  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.12);
+}
+
+.pending-map {
+  height: 280px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  margin-top: 8px;
+}
+
+.pending-raw-data {
+  margin: 0;
+  background: #121212;
+  color: #f6f6f6;
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .approve-btn:disabled {

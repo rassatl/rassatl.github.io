@@ -5,6 +5,7 @@ import ListeDeroulante from './components/ListeDeroulante.vue'
 import MapComponent from './components/MapView.vue'
 import { DEFAULT_LANGUAGE } from './constants/i18n'
 import { auth } from './firebase'
+import { getUserProfile } from './services/userProfileService'
 
 // État centralisé pour l'ouverture de la sidebar
 const isOpen = ref(true)
@@ -13,9 +14,10 @@ const selectedSpeciality = ref('');
 const language = ref(localStorage.getItem('site-language') || DEFAULT_LANGUAGE)
 const refreshToken = ref(0)
 const currentUser = ref(null)
+const currentUserProfile = ref(null)
 
 const adminEmails = new Set(
-  `${import.meta.env.VITE_ADMIN_EMAIL || ''}`
+  `${import.meta.env.VITE_ADMIN_EMAILS || ''},${import.meta.env.VITE_ADMIN_EMAIL || ''}`
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean)
@@ -30,8 +32,20 @@ const userRole = computed(() => {
 let stopAuthListener = () => {}
 
 if (auth) {
-  stopAuthListener = onAuthStateChanged(auth, (user) => {
+  stopAuthListener = onAuthStateChanged(auth, async (user) => {
     currentUser.value = user
+
+    if (!user?.uid) {
+      currentUserProfile.value = null
+      return
+    }
+
+    try {
+      currentUserProfile.value = await getUserProfile(user.uid)
+    } catch (error) {
+      console.error('Impossible de charger le profil utilisateur:', error)
+      currentUserProfile.value = null
+    }
   })
 }
 
@@ -65,6 +79,7 @@ const onDataChanged = () => {
     :language="language"
     :refreshToken="refreshToken"
     :currentUser="currentUser"
+    :currentUserProfile="currentUserProfile"
     :userRole="userRole"
     @toggle="isOpen = !isOpen"
     @update-speciality="selectedSpeciality = $event"

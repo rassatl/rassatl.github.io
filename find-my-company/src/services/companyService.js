@@ -23,6 +23,7 @@ import {
 export const COMPANY_STATUS = {
   PENDING: 'pending',
   APPROVED: 'approved',
+  REJECTED: 'rejected',
 };
 
 const mapCompanyDoc = (snapshotDoc) => {
@@ -221,6 +222,31 @@ export const approveCompany = async (companyId, adminUser) => {
 };
 
 /**
+ * Refuse une entreprise en attente
+ * @param {string} companyId - ID de l'entreprise
+ * @param {{uid: string, email?: string}} adminUser - Admin refusant l'entreprise
+ */
+export const rejectCompany = async (companyId, adminUser) => {
+  try {
+    if (!adminUser?.uid) {
+      throw new Error('Action réservée aux administrateurs connectés.');
+    }
+
+    const companyRef = doc(db, 'companies', companyId);
+    await updateDoc(companyRef, {
+      status: COMPANY_STATUS.REJECTED,
+      validatedAt: Timestamp.now(),
+      validatedByUid: adminUser.uid,
+      validatedByEmail: adminUser.email || null,
+      updatedAt: Timestamp.now(),
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors du refus de l\'entreprise:', error);
+    throw new Error(`Impossible de refuser l'entreprise: ${error.message}`);
+  }
+};
+
+/**
  * Met à jour une entreprise existante
  * @param {string} companyId - ID de l'entreprise
  * @param {Partial<Company>} companyData - Données à mettre à jour
@@ -313,9 +339,10 @@ export const filterCompaniesBySpeciality = (speciality, companies) => {
  * @param {string} companyId - ID de l'entreprise
  * @param {number} rating - Note (1-5)
  * @param {string} comment - Commentaire
+ * @param {{uid?: string|null, reviewerName?: string, reviewerFirstName?: string, reviewerLastName?: string}} reviewer - Auteur de l'avis
  * @returns {Promise<Company>} Entreprise mise à jour
  */
-export const addStudentRating = async (companyId, rating, comment) => {
+export const addStudentRating = async (companyId, rating, comment, reviewer = {}) => {
   try {
     if (rating < 1 || rating > 5) {
       throw new Error('La note doit être entre 1 et 5');
@@ -328,6 +355,10 @@ export const addStudentRating = async (companyId, rating, comment) => {
     studentRatings.push({
       rating,
       comment,
+      reviewerUid: reviewer.uid || null,
+      reviewerName: reviewer.reviewerName || '',
+      reviewerFirstName: reviewer.reviewerFirstName || '',
+      reviewerLastName: reviewer.reviewerLastName || '',
       date: Timestamp.now(),
     });
     

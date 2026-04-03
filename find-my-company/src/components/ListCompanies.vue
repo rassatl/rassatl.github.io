@@ -23,6 +23,14 @@ const props = defineProps({
   language: {
     type: String,
     default: 'fr'
+  },
+  currentUser: {
+    type: Object,
+    default: null,
+  },
+  currentUserProfile: {
+    type: Object,
+    default: null,
   }
 })
 
@@ -105,6 +113,8 @@ const handleEdit = (company) => {
       v-if="selectedCompany"
       :company="selectedCompany"
       :language="props.language"
+      :currentUser="props.currentUser"
+      :currentUserProfile="props.currentUserProfile"
       @refresh="handleRefresh"
       @delete="handleDelete"
       @edit="handleEdit"

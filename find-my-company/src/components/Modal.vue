@@ -30,9 +30,11 @@ const emit = defineEmits(['close']);
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 2000;
 }
 .modal-content {
   background: white;
+  color: var(--black);
   padding: 20px;
   width: min(1280px, 94vw);
   height: min(90vh, 940px);
