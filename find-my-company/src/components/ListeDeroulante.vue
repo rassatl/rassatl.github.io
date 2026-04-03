@@ -405,6 +405,26 @@ watch(
       <div v-if="props.isOpen" class="refresh-action">
         <button @click="fetchCompanies" class="refresh-button" :aria-label="ui.sidebar.refresh">⟳</button>
       </div>
+      
+      <!-- Sélecteur de langue -->
+      <div v-if="props.isOpen" class="language-switch" :aria-label="ui.sidebar.languageLabel">
+        <button
+          class="lang-btn"
+          :class="{ active: props.language === 'fr' }"
+          @click="emit('update-language', 'fr')"
+          type="button"
+        >
+          FR
+        </button>
+        <button
+          class="lang-btn"
+          :class="{ active: props.language === 'en' }"
+          @click="emit('update-language', 'en')"
+          type="button"
+        >
+          EN
+        </button>
+      </div>
 
       <div v-if="props.isOpen && canCreateCompany" class="add-company-action">
         <button @click="openModal" class="plus-button" :aria-label="ui.sidebar.addCompany">+</button>
@@ -459,26 +479,6 @@ watch(
         </template>
 
         <p v-if="authError" class="auth-error">{{ authError }}</p>
-      </div>
-
-      <!-- Sélecteur de langue -->
-      <div v-if="props.isOpen" class="language-switch" :aria-label="ui.sidebar.languageLabel">
-        <button
-          class="lang-btn"
-          :class="{ active: props.language === 'fr' }"
-          @click="emit('update-language', 'fr')"
-          type="button"
-        >
-          FR
-        </button>
-        <button
-          class="lang-btn"
-          :class="{ active: props.language === 'en' }"
-          @click="emit('update-language', 'en')"
-          type="button"
-        >
-          EN
-        </button>
       </div>
 
       <hr class="separator" />
@@ -648,10 +648,16 @@ h2 {
 }
 
 .language-switch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 32px;
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: center;
-  margin: 6px 0 2px;
+  z-index: 2;
 }
 
 .lang-btn {
@@ -873,7 +879,7 @@ h2 {
 .connection-action {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 15px;
 }
 
 .refresh-action {
