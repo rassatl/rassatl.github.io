@@ -2,6 +2,10 @@
 
 defineProps({
   isOpen: Boolean,
+  sidebarOffset: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits(['close']);
@@ -10,8 +14,21 @@ const emit = defineEmits(['close']);
 <template>
   <!-- Utilisation de Teleport pour rendre le modal dans le body -->
   <Teleport to="body">
-    <div v-if="isOpen" class="modal-overlay" @click.self="emit('close')">
-      <div class="modal-content">
+    <div
+      v-if="isOpen"
+      class="modal-overlay"
+      :style="{
+        left: `${sidebarOffset}px`,
+        width: `calc(100vw - ${sidebarOffset}px)`,
+      }"
+      @click.self="emit('close')"
+    >
+      <div
+        class="modal-content"
+        :style="{
+          width: `min(1280px, calc(100vw - ${sidebarOffset}px - 32px))`,
+        }"
+      >
         <button class="modal-close" @click="emit('close')">×</button>
         <slot></slot>
       </div>
@@ -23,7 +40,6 @@ const emit = defineEmits(['close']);
 .modal-overlay {
   position: fixed;
   top: 0;
-  left: 15%;
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
@@ -34,8 +50,10 @@ const emit = defineEmits(['close']);
 .modal-content {
   background: white;
   padding: 20px;
-  width: 60%;
-  height: 80%;
+  width: min(1280px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  box-sizing: border-box;
   border-radius: 8px;
   position: relative;
 }
@@ -49,5 +67,13 @@ const emit = defineEmits(['close']);
   font-size: 2rem;
   cursor: pointer;
   z-index: 10000 !important;
+}
+
+@media (max-width: 900px) {
+  .modal-content {
+    width: 96vw;
+    max-height: 90vh;
+    padding: 14px;
+  }
 }
 </style>
