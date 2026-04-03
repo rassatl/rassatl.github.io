@@ -1,110 +1,210 @@
-# 🚀 Project Name
+# Find My Company
 
-**Project Name** is a powerful and flexible web application built with **Vue.js** and **Leaflet**, designed to showcase and manage company locations on an interactive map. Users can filter companies by specialties, view company details, and interact with the map for enhanced experience.
+Application web de cartographie et de découverte d'entreprises, construite avec Vue 3, Leaflet et Firebase.
 
-## 📝 Table of Contents
-- [About](#about)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
+L'objectif est simple: aider les étudiants et jeunes profils à identifier des entreprises selon leur spécialité, leur localisation et plusieurs critères métier.
 
-## 💡 About
+## Sommaire
 
-This project is designed to allow users to explore companies based on their locations and specialties. By integrating **Leaflet** for map visualization and **Firebase** for backend services, we provide a seamless experience for users to interact with company data in real-time.
+1. [Présentation](#presentation)
+2. [Types d'utilisateurs](#types-dutilisateurs)
+3. [Fonctionnalités principales](#fonctionnalites-principales)
+4. [Stack technique](#stack-technique)
+5. [Structure du projet](#structure-du-projet)
+6. [Prérequis](#prerequis)
+7. [Installation et lancement](#installation-et-lancement)
+8. [Configuration Firebase et variables d'environnement](#configuration-firebase-et-variables-denvironnement)
+9. [Scripts disponibles](#scripts-disponibles)
+10. [Déploiement](#deploiement)
+11. [Roadmap courte](#roadmap-courte)
+12. [Contribution](#contribution)
 
-Whether you're a developer or an entrepreneur, this application provides a powerful tool for discovering, managing, and viewing company locations.
+## Presentation
 
-## 🚀 Features
+Find My Company permet de:
 
-- **Interactive Map**: Visualize company locations using **Leaflet.js**.
-- **Company Filters**: Filter companies based on specialties and easily find relevant businesses.
-- **Dynamic Updates**: Real-time updates for map markers based on visible regions and zoom levels.
-- **Add/Edit Companies**: Easily add or edit companies using an intuitive interface.
-- **Role-based Access**: Guest users can browse companies, authenticated users can submit new companies, and admins can approve pending submissions.
-- **Admin Validation Workflow**: Newly submitted companies stay hidden until an admin validates them.
-- **Mobile Responsive**: Optimized for both desktop and mobile users.
+- visualiser des entreprises sur une carte interactive,
+- filtrer les résultats (spécialité, pays, secteur, note, etc.),
+- consulter des fiches détaillées,
+- proposer de nouvelles entreprises,
+- modérer les propositions via un workflow d'approbation admin.
 
-## 🛠️ Tech Stack
+Le projet est bilingue (FR/EN) et pensé pour une utilisation desktop et mobile.
 
-This project uses the following technologies:
+## Types d'utilisateurs
 
-- **Vue.js**: JavaScript framework for building user interfaces.
-- **Leaflet.js**: JavaScript library for interactive maps.
-- **Firebase**: Cloud Firestore for backend data management.
-- **CSS/SCSS**: For custom styling and responsiveness.
-- **Node.js**: For running development server and dependencies.
+### 1. Visiteur (guest)
 
-## 📦 Installation
+- consulte la carte et la liste des entreprises validées,
+- utilise les filtres et la recherche,
+- visualise les informations publiques.
 
-To get started with this project locally, follow these steps:
+### 2. Utilisateur connecté (user)
 
-1. **Clone the repository**:
+- possède toutes les capacités du visiteur,
+- peut proposer une nouvelle entreprise via le formulaire,
+- peut interagir avec les fonctionnalités liées au profil connecté.
 
-    ```bash
-    git clone https://github.com/yourusername/project-name.git
-    ```
+### 3. Administrateur (admin)
 
-2. **Navigate to the project folder**:
+- possède toutes les capacités précédentes,
+- accède à la liste d'attente des propositions,
+- peut afficher le dossier complet d'une proposition,
+- peut éditer, valider ou refuser une entreprise,
+- contrôle la publication effective des nouvelles entrées.
 
-    ```bash
-    cd project-name
-    ```
+Les administrateurs sont définis via les variables d'environnement (`VITE_ADMIN_EMAIL` ou `VITE_ADMIN_EMAILS`).
 
-3. **Install dependencies**:
+## Fonctionnalites principales
 
-    ```bash
-    npm install
-    ```
+### Carte et navigation
 
-4. **Set up Firebase**:
-   - Create a Firebase project at [Firebase Console](https://console.firebase.google.com/).
-   - Obtain your Firebase config and place it in the appropriate file (e.g., `.env` or `firebaseConfig.js`).
-    - In this repository, create [find-my-company/.env](find-my-company/.env) from [find-my-company/.env.example](find-my-company/.env.example) and set `VITE_FIREBASE_API_KEY`.
-    - Configure admin emails in `.env`:
+- affichage des entreprises avec Leaflet,
+- plusieurs fonds de carte (plan, satellite, terrain, sombre),
+- synchronisation de la liste avec la zone visible sur la carte.
 
-     ```bash
-     VITE_ADMIN_EMAILS=admin1@domain.com,admin2@domain.com
-     ```
+### Recherche et filtres
 
-    - Alternatively, for a single admin:
+- recherche texte (nom, description, ville, pays),
+- bandeau de filtres repliable,
+- filtres disponibles:
+    - spécialité,
+    - pays,
+    - ville,
+    - secteurs,
+    - note moyenne (rating),
+    - modifié récemment (30 derniers jours),
+- réinitialisation globale des filtres,
+- affichage du nombre de résultats et du nombre de filtres actifs.
 
-     ```bash
-     VITE_ADMIN_EMAIL=admin@domain.com
-     ```
+### Gestion des entreprises
 
-5. **Run the development server**:
+- formulaire d'ajout avec géolocalisation,
+- stockage des données dans Firestore,
+- gestion des champs détaillés (adresse, site, secteur, description, dates).
 
-    ```bash
-    npm run serve
-    ```
+### Workflow de modération
 
-6. Open your browser and go to `http://localhost:8080` to see the application in action.
+- création d'entreprise en statut `pending`,
+- validation admin (`approved`) ou refus (`rejected`),
+- les entreprises non validées ne sont pas visibles publiquement.
 
-## 🖥️ Usage
+### Authentification
 
-1. **Exploring Companies**: Use the interactive map to explore company locations. Zoom and pan to reveal nearby businesses.
-2. **Filtering Companies**: Select from different specialties to filter the companies that match your interest.
-3. **Adding Companies**: Click the "Add Company" button to add a new company to the map. Fill in the relevant details and confirm.
-4. **Editing**: Modify company information easily via the interface.
+- création de compte / connexion / déconnexion via Firebase Auth,
+- gestion des erreurs usuelles (email invalide, mot de passe faible, etc.),
+- mode dégradé quand la clé API Firebase est absente.
 
-## 🛠️ Contributing
+## Stack technique
 
-Contributions are welcome! If you have any ideas, bugs, or improvements, feel free to open an issue or submit a pull request. Here's how you can contribute:
+- Vue 3 (Composition API)
+- Vite
+- Leaflet
+- Firebase
+    - Firestore (données entreprises)
+    - Authentication (gestion des comptes)
+- CSS scoped dans les composants Vue
 
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes.
-4. Commit your changes (`git commit -m 'Add some feature'`).
-5. Push to the branch (`git push origin feature-branch`).
-6. Open a pull request.
+## Structure du projet
 
-## 📄 License
+```text
+.
+├── README.md
+├── find-my-company/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── services/
+│   │   ├── constants/
+│   │   ├── firebase.js
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── public/
+│   ├── functions/
+│   ├── package.json
+│   └── vite.config.js
+└── requirements.txt
+```
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+## Prerequis
 
----
+- Node.js 20+ recommandé
+- npm
+- un projet Firebase (Firestore + Auth)
 
-Enjoy exploring **Project Name**! Feel free to contact me if you need assistance or have any questions. Let's build something great together! 😄
+## Installation et lancement
+
+Depuis la racine du repository:
+
+```bash
+cd find-my-company
+npm install
+npm run dev
+```
+
+Application disponible ensuite sur l'URL locale affichée par Vite (généralement `http://localhost:5173`).
+
+## Configuration Firebase et variables d'environnement
+
+Créer le fichier `find-my-company/.env` et y définir au minimum:
+
+```bash
+VITE_FIREBASE_API_KEY=your_api_key
+```
+
+Pour les admins:
+
+```bash
+VITE_ADMIN_EMAIL=admin@domain.com
+```
+
+ou plusieurs admins:
+
+```bash
+VITE_ADMIN_EMAILS=admin1@domain.com,admin2@domain.com
+```
+
+Notes:
+
+- si `VITE_FIREBASE_API_KEY` est absente, l'authentification est désactivée,
+- Firestore peut rester fonctionnel selon la configuration du projet Firebase.
+
+## Scripts disponibles
+
+Dans le dossier `find-my-company`:
+
+- `npm run dev` lance le serveur de développement,
+- `npm run build` génère un build de production,
+- `npm run preview` prévisualise le build localement,
+- `npm run deploy` publie le dossier `dist` via `gh-pages`.
+
+## Deploiement
+
+Le déploiement actuel est prévu pour GitHub Pages via:
+
+```bash
+npm run build
+npm run deploy
+```
+
+Vérifier avant déploiement:
+
+- les variables d'environnement de build,
+- la configuration d'accès Firebase,
+- les rôles admin attendus.
+
+## Roadmap courte
+
+- tests unitaires et e2e sur les filtres,
+- amélioration de la performance bundle (code splitting),
+- tableau de bord admin plus complet (historique des validations),
+- import/export des entreprises.
+
+## Contribution
+
+Les contributions sont bienvenues.
+
+1. Crée une branche dédiée.
+2. Implémente tes modifications.
+3. Vérifie que l'application build correctement.
+4. Ouvre une pull request claire avec le contexte et les captures si nécessaire.
+
