@@ -523,8 +523,19 @@ const submitForm = async () => {
   border-radius: 6px;
   font-size: 14px;
   background-color: var(--white);
+  color: var(--black);
   font-family: inherit;
   transition: border 0.2s;
+}
+
+.form-group input[type="date"] {
+  color: var(--black);
+  color-scheme: light;
+}
+
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  cursor: pointer;
 }
 
 .form-group input:focus,
