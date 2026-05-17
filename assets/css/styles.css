@@ -1,0 +1,371 @@
+:root {
+  --bg-top: #12062f;
+  --bg-bottom: #2e0832;
+  --gold: #ffd166;
+  --cream: #fff7ea;
+  --ink: #2b1e1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Cormorant Garamond", serif;
+  color: var(--cream);
+  background: radial-gradient(circle at top, #31125f 0%, var(--bg-top) 35%, var(--bg-bottom) 100%);
+  overflow-x: hidden;
+}
+
+#fireworks {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 2rem 1.25rem 3rem;
+}
+
+h1 {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(2rem, 5vw, 3.7rem);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.polaroid-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 240px));
+  gap: clamp(0.9rem, 2.2vw, 1.6rem);
+  align-items: start;
+}
+
+.polaroid {
+  margin: 0;
+  background: #fff;
+  color: var(--ink);
+  padding: 0.7rem 0.7rem 1.2rem;
+  border-radius: 0.2rem;
+  box-shadow: 0 20px 35px rgba(0, 0, 0, 0.35);
+  transform-origin: center top;
+  animation: floatIn 800ms ease both;
+}
+
+.polaroid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.polaroid figcaption {
+  margin-top: 0.6rem;
+  text-align: center;
+  font-family: "Patrick Hand", cursive;
+  font-size: 1.15rem;
+}
+
+.tilt-left {
+  transform: rotate(-6deg);
+}
+
+.tilt-right {
+  transform: rotate(6deg);
+}
+
+.tilt-left-soft {
+  transform: rotate(-2deg);
+}
+
+.gift-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 1.6rem;
+  border: 2px solid rgba(255, 209, 102, 0.8);
+  border-radius: 999px;
+  color: var(--gold);
+  text-decoration: none;
+  font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(7, 5, 22, 0.35);
+  backdrop-filter: blur(2px);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.gift-button:hover,
+.gift-button:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 30px rgba(255, 209, 102, 0.35);
+  background: rgba(7, 5, 22, 0.6);
+}
+
+@keyframes floatIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 780px) {
+  .polaroid-grid {
+    grid-template-columns: minmax(180px, 260px);
+  }
+
+  .tilt-left,
+  .tilt-right,
+  .tilt-left-soft {
+    transform: rotate(0deg);
+  }
+}
+
+.gift-scene {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: "Cormorant Garamond", serif;
+  color: var(--cream);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 209, 102, 0.08), transparent 35%),
+    radial-gradient(circle at 80% 80%, rgba(255, 126, 185, 0.1), transparent 30%),
+    linear-gradient(145deg, #0d0620 0%, #1c0f3d 45%, #2c1653 100%);
+}
+
+.gift-layout {
+  min-height: 100dvh;
+  width: min(980px, 94vw);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) minmax(360px, 620px);
+  grid-template-rows: auto auto auto;
+  justify-content: center;
+  align-items: end;
+  column-gap: 0.85rem;
+  row-gap: 0.2rem;
+  padding: 1.3rem 0 2rem;
+}
+
+.mii-panel {
+  grid-column: 1;
+  grid-row: 2;
+  width: min(420px, 70vw);
+  display: grid;
+  place-items: center;
+  /* remonter légèrement l'avatar pour mieux s'aligner avec la zone de texte */
+  margin-top: -2rem;
+}
+
+.mii-avatar {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  display: block;
+  image-rendering: auto;
+  filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.5));
+}
+
+.dialog-card {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  width: min(620px, 92vw);
+
+  padding: 1rem 1.25rem;
+  border-radius: 22px;
+  background: #fff;
+  border: none;
+
+  box-shadow:
+    0 28px 60px rgba(23, 5, 216, 0.48),
+    0 10px 28px rgba(245, 2, 2, 0.28),
+    0 8px 26px rgba(224, 18, 42, 0.18);
+
+  overflow: visible;
+  z-index: 10;
+  /* abaisser la carte pour mieux aligner avec l'avatar */
+  /* réduire le décalage vers le bas pour remonter la carte de dialogue */
+  transform: translateY(40px);
+}
+
+/* contenu au-dessus */
+.dialog-card > * {
+  position: relative;
+  z-index: 3;
+}
+
+/* petits ronds décoratifs entre la zone de dialogue et le personnage */
+.dialog-card::after {
+  content: "";
+  position: absolute;
+
+  /* positionnement près de la base gauche de la carte */
+  left: -70px;
+  bottom: -50px;
+
+  /* premier rond (les autres sont créés via box-shadow) */
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  border-radius: 50%;
+
+  /* deux ronds supplémentaires, décalés et pas alignés (espacement augmenté) */
+  box-shadow:
+    48px -30px 0 0 #fff,
+    96px 14px 0 0 #fff,
+    /* ronds décalés : ombres plus douces */
+    48px -30px 12px 4px rgba(23, 5, 216, 0.28),
+    96px 14px 12px 4px rgba(23, 5, 216, 0.22),
+    /* lueur principale autour du premier rond (subtile) */
+    0 8px 20px rgba(23, 5, 216, 0.22);
+  /* derrière la boite mais visible par-dessus le fond */
+  z-index: -1;
+
+  /* ombre gérée via box-shadow (aucun filter pour éviter double ombre) */
+  /* tourner de 90° à gauche */
+  transform: rotate(120deg);
+  transform-origin: center;
+  opacity: 0.98;
+}
+
+/* subtle shadow under the pointer - désactivé */
+.dialog-card::before{
+  display: none;
+}
+
+.dialog-card:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.dialog-text {
+  margin: 0;
+  min-height: 4.2rem;
+  font-size: clamp(1.35rem, 2.8vw, 2rem);
+  line-height: 1.25;
+  font-family: "Patrick Hand", cursive;
+  color: #201527;
+}
+
+.dialog-hint {
+  margin: 0.6rem 0 0;
+  text-align: right;
+  font-size: 1rem;
+  letter-spacing: 0.35px;
+  color: #584565;
+  opacity: 0.9;
+}
+
+.next-step-button {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.2rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: #1b1226;
+  font-weight: 700;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  background: linear-gradient(90deg, #ffcf8f 0%, #ffd166 45%, #ff9ed0 100%);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.next-step-button[hidden] {
+  display: none;
+}
+
+.next-step-button:hover,
+.next-step-button:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.4);
+}
+
+.return-button {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--cream);
+  background: rgba(10, 7, 24, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(10px);
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.return-button:hover,
+.return-button:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(10, 7, 24, 0.68);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
+}
+
+@media (max-width: 780px) {
+  .gift-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem 0 1.7rem;
+  }
+
+  .dialog-card {
+    order: 1;
+  }
+
+  .mii-panel {
+    order: 2;
+    margin-top: 0;
+  }
+
+  .next-step-button {
+    order: 3;
+  }
+
+  .dialog-card {
+    width: min(760px, 92vw);
+    transform: translateY(16px);
+  }
+
+  .dialog-text {
+    min-height: 4.8rem;
+  }
+}

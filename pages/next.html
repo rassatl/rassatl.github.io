@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Souvenirs — Galerie</title>
+
+<style>
+  :root{--bg:#0f0710;--card:#1b1220;--accent:#ff9fb1;--muted:#d7cbd6}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(180deg,#0b0610 0%, #1a0b18 100%);font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color:var(--muted)}
+  .container{width:100%;max-width:880px}
+  .return-button{position:fixed;top:16px;left:16px;z-index:10;padding:.6rem .9rem;border-radius:999px;text-decoration:none;font-weight:700;color:#fff;background:rgba(10,7,24,0.46);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)}
+  .gallery{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));padding:18px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .title{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+  .title h1{font-family:Georgia, serif;margin:0;font-size:1.3rem;color:var(--accent)}
+  .viewer{position:relative;border-radius:10px;overflow:hidden;background:#000}
+  .viewer{display:flex;align-items:center;justify-content:center}
+  .slide{display:none;max-width:100%;height:420px;object-fit:contain;background:#000;margin:0 auto}
+  .slide.active{display:block}
+  .caption{padding:12px 10px;background:linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.45));position:absolute;left:0;right:0;bottom:0;color:#fff;font-size:0.95rem}
+  .controls{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+  .btn{background:transparent;border:1px solid rgba(255,255,255,0.12);color:var(--muted);padding:.5rem .8rem;border-radius:8px;cursor:pointer}
+  .dots{display:flex;gap:8px}
+  .dot{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.12);cursor:pointer}
+  .dot.active{background:var(--accent);box-shadow:0 0 8px rgba(255,159,177,.3)}
+  .meta{margin-top:10px;color:rgba(215,203,214,.8);font-size:0.9rem}
+  .thumbs{display:flex;gap:8px;margin-top:12px;overflow-x:auto;padding-bottom:6px}
+  .thumbs img{width:92px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;opacity:.9;border:2px solid transparent}
+  .thumbs img.active{border-color:var(--accent);opacity:1}
+  @media (max-width:600px){.slide{height:260px}.thumbs img{width:72px;height:52px}}
+</style>
+</head>
+<body>
+
+<a class="return-button" href="gift.html">Retour</a>
+
+<div class="container">
+  <div class="gallery">
+    <div class="title">
+      <div class="heart">❤️</div>
+      <h1>Nos souvenirs</h1>
+    </div>
+
+    <div class="viewer" id="viewer">
+      <!-- Slides injected by JS -->
+    </div>
+
+    <div class="controls">
+      <div>
+        <button class="btn" id="prev">◀ Précédent</button>
+        <button class="btn" id="next">Suivant ▶</button>
+      </div>
+      <div class="dots" id="dots"></div>
+    </div>
+
+    <div class="meta" id="meta">Clique sur une image pour lire le souvenir.</div>
+
+    <div class="thumbs" id="thumbs" aria-hidden="false"></div>
+  </div>
+</div>
+
+<script>
+// Configuration des diapos : image relative depuis le dossier pages/ -> ../assets/images/
+const slides = [
+  { src: '../assets/images/img1.jpeg', caption: "" },
+  { src: '../assets/images/img2.jpeg', caption: "" },
+  { src: '../assets/images/img3.jpeg', caption: "" },
+  { src: '../assets/images/img4.jpeg', caption: "" },
+  { src: '../assets/images/img5.jpeg', caption: "" },
+  { src: '../assets/images/img6.jpeg', caption: "" },
+  { src: '../assets/images/img7.jpeg', caption: "" },
+  { src: '../assets/images/img8.jpeg', caption: "" },
+  { src: '../assets/images/img9.jpeg', caption: "" },
+  { src: '../assets/images/img10.jpeg', caption: "" },
+  { src: '../assets/images/img11.jpeg', caption: "" },
+  { src: '../assets/images/img12.jpeg', caption: "" },
+  { src: '../assets/images/img13.jpeg', caption: "" },
+  { src: '../assets/images/img14.jpeg', caption: "" },
+  { src: '../assets/images/img15.jpeg', caption: "" },
+  { src: '../assets/images/img16.jpeg', caption: "" },
+  { src: '../assets/images/img17.jpeg', caption: "" },
+  { src: '../assets/images/img18.jpeg', caption: "" },
+  { src: '../assets/images/img19.jpeg', caption: "" },
+  { src: '../assets/images/img20.jpeg', caption: "" },
+  { src: '../assets/images/img21.jpeg', caption: "" },
+  { src: '../assets/images/img22.jpeg', caption: "" },
+  { src: '../assets/images/img23.jpeg', caption: "" }
+];
+
+const viewer = document.getElementById('viewer');
+const dotsEl = document.getElementById('dots');
+const thumbs = document.getElementById('thumbs');
+const meta = document.getElementById('meta');
+let index = 0;
+
+function renderSlides(){
+  viewer.innerHTML = '';
+  dotsEl.innerHTML = '';
+  thumbs.innerHTML = '';
+
+  slides.forEach((s,i)=>{
+    const img = document.createElement('img');
+    img.src = s.src;
+    img.alt = s.caption || ('Souvenir ' + (i+1));
+    img.className = 'slide' + (i===index? ' active':'');
+    img.loading = 'lazy';
+    img.addEventListener('click', ()=> goTo(i));
+    viewer.appendChild(img);
+
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i===index? ' active':'');
+    dot.addEventListener('click', ()=> goTo(i));
+    dotsEl.appendChild(dot);
+
+    const t = document.createElement('img');
+    t.src = s.src; t.alt = s.caption; t.addEventListener('click', ()=> goTo(i));
+    if(i===index) t.classList.add('active');
+    thumbs.appendChild(t);
+  });
+
+  updateMeta();
+}
+
+function updateMeta(){
+  meta.textContent = slides[index].caption || '';
+  // update classes
+  const allSlides = viewer.querySelectorAll('.slide');
+  allSlides.forEach((el,i)=> el.classList.toggle('active', i===index));
+  const allDots = dotsEl.querySelectorAll('.dot');
+  allDots.forEach((el,i)=> el.classList.toggle('active', i===index));
+  const allThumbs = thumbs.querySelectorAll('img');
+  allThumbs.forEach((el,i)=> el.classList.toggle('active', i===index));
+}
+
+function goTo(i){
+  index = (i + slides.length) % slides.length;
+  updateMeta();
+}
+
+function next(){ goTo(index+1); }
+function prev(){ goTo(index-1); }
+
+
+// Controls
+document.getElementById('prev').addEventListener('click', ()=>{ prev(); });
+document.getElementById('next').addEventListener('click', ()=>{ next(); });
+
+// Keyboard navigation
+window.addEventListener('keydown', (e)=>{
+  if(e.key === 'ArrowRight') next();
+  if(e.key === 'ArrowLeft') prev();
+});
+
+renderSlides();
+
+</script>
+
+</body>
+</html>

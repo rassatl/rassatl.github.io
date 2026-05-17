@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ton cadeau</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;700&family=Patrick+Hand&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../assets/css/styles.css" />
+  </head>
+  <body class="gift-scene">
+    <a class="return-button" href="../Flower/flower.html">Retour</a>
+    <main class="gift-layout">
+      <section class="mii-panel" aria-label="Personnage Tomodachi">
+        <img src="../assets/images/mii.png" alt="Mon personnage en train de te parler" class="mii-avatar" />
+      </section>
+
+      <section
+        id="dialogCard"
+        class="dialog-card"
+        role="button"
+        tabindex="0"
+        aria-label="Boite de discussion. Clique pour continuer"
+      >
+        <p id="dialogText" class="dialog-text"></p>
+        <p id="dialogHint" class="dialog-hint">Clique pour continuer</p>
+      </section>
+
+      <a id="nextStepButton" class="next-step-button" href="next.html" hidden>
+        Passer a l'etape suivante
+      </a>
+    </main>
+
+    <script src="../assets/js/gift.js"></script>
+  </body>
+</html>
