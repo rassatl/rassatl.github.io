@@ -109,7 +109,7 @@ const fetchCompaniesAndAddMarkers = async () => {
         const popupContent = document.createElement('span');
         popupContent.textContent = name;
         marker.bindPopup(popupContent);
-        companyList.push({ ...company, marker });
+        companyList.push({ ...company, id: doc.id, marker });
       }
     });
     companies.value = companyList
