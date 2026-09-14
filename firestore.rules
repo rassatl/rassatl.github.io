@@ -5,7 +5,7 @@ service cloud.firestore {
 
     function isValidCompanyData(data) {
       return data.keys().hasOnly([
-        'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y'
+        'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y', 'mission', 'review'
       ])
       && data.speciality in [
         'Développement Logiciel, Tests et Qualité', 'IA & Big Data'
@@ -30,7 +30,60 @@ service cloud.firestore {
       && data.x <= 90
       && data.y is number
       && data.y >= -180
-      && data.y <= 180;
+      && data.y <= 180
+      && data.mission is string
+      && data.mission.size() > 0
+      && data.mission.size() <= 1000
+      && (!('review' in data) || isValidReview(data.review));
+    }
+
+    function isValidReview(review) {
+      return review.keys().hasOnly(['rating', 'comment'])
+        && review.rating is int
+        && review.rating >= 1
+        && review.rating <= 5
+        && (!('comment' in review) || (review.comment is string && review.comment.size() <= 500));
+    }
+
+    // Contact soumis via une proposition en attente : pas encore publié, pas
+    // encore de jeton de masquage (celui-ci n'est créé qu'à la publication,
+    // juste avant l'envoi de l'email).
+    function isValidPendingContactData(data) {
+      return data.keys().hasOnly(['firstName', 'lastName', 'role', 'email', 'phone'])
+        && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
+        && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100
+        && data.role is string && data.role.size() > 0 && data.role.size() <= 150
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.phone is string && data.phone.size() <= 30;
+    }
+
+    // Contact d'une entreprise publiée : visible publiquement, et muni d'un
+    // jeton permettant à la personne elle-même de masquer ses informations
+    // sans être authentifiée (lien envoyé par email).
+    function isValidPublishedContactData(data) {
+      return data.keys().hasOnly(['firstName', 'lastName', 'role', 'email', 'phone', 'hidden', 'hideToken'])
+        && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
+        && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100
+        && data.role is string && data.role.size() > 0 && data.role.size() <= 150
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+        && data.phone is string && data.phone.size() <= 30
+        && data.hidden is bool
+        && data.hideToken is string && data.hideToken.size() >= 16;
+    }
+
+    // Un contact masqué par son propre titulaire : toutes les informations
+    // personnelles sont effacées (pas seulement cachées côté affichage), le
+    // jeton reste inchangé (il a servi à autoriser cette seule action).
+    function isSelfRedactedContact(newData, oldData) {
+      return newData.keys().hasOnly(['firstName', 'lastName', 'role', 'email', 'phone', 'hidden', 'hideToken'])
+        && newData.firstName == ''
+        && newData.lastName == ''
+        && newData.role == ''
+        && newData.email == ''
+        && newData.phone == ''
+        && newData.hidden == true
+        && newData.hideToken == oldData.hideToken
+        && oldData.hidden == false;
     }
 
     // Entreprises validées, visibles publiquement sur la carte. Elles ne
@@ -40,6 +93,16 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null && isValidCompanyData(request.resource.data);
       allow update, delete: if false;
+
+      // Personnes à contacter pour cette entreprise (CV / lettre de
+      // motivation). Lecture publique : c'est tout l'intérêt de la donnée.
+      match /contacts/{contactId} {
+        allow read: if true;
+        allow create: if request.auth != null && isValidPublishedContactData(request.resource.data) && request.resource.data.hidden == false;
+        allow delete: if false;
+        allow update: if (request.auth != null && isValidPublishedContactData(request.resource.data))
+          || isSelfRedactedContact(request.resource.data, resource.data);
+      }
     }
 
     // Propositions d'ajout soumises par n'importe qui (y compris des
@@ -51,6 +114,13 @@ service cloud.firestore {
       allow create: if isValidCompanyData(request.resource.data);
       allow update: if request.auth != null && isValidCompanyData(request.resource.data);
       allow delete: if request.auth != null;
+
+      match /contacts/{contactId} {
+        allow read: if request.auth != null;
+        allow create: if isValidPendingContactData(request.resource.data);
+        allow update: if request.auth != null && isValidPendingContactData(request.resource.data);
+        allow delete: if request.auth != null;
+      }
     }
   }
 }

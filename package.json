@@ -11,6 +11,7 @@
     "deploy": "gh-pages -d dist -b main -r https://github.com/rassatl/rassatl.github.io.git"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "esri-leaflet": "^3.0.15",
     "esri-leaflet-geocoder": "^3.1.5",
     "firebase": "^11.6.0",
