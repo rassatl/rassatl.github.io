@@ -36,6 +36,7 @@ const address = ref(props.pendingCompany?.address ?? '');
 const city = ref(props.pendingCompany?.city ?? '');
 const pc = ref(props.pendingCompany?.pc ?? '');
 const country = ref(props.pendingCompany?.country ?? '');
+const website = ref(props.pendingCompany?.website ?? '');
 const x = ref(props.pendingCompany?.x ?? '');
 const y = ref(props.pendingCompany?.y ?? '');
 
@@ -96,6 +97,25 @@ const validateCompany = () => {
   }
 
   return { ...fields, x: latitude, y: longitude };
+};
+
+// Le site web est facultatif ; s'il est renseigné, on le normalise (ajoute
+// https:// si absent) et on vérifie qu'il s'agit d'une URL valide. new URL()
+// seul ne suffit pas : certains moteurs (Chromium) acceptent des hôtes
+// contenant des espaces sans lever d'erreur, d'où la vérification du nom
+// d'hôte en plus.
+const hostnamePattern = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+const validateWebsite = () => {
+  const raw = website.value.trim();
+  if (!raw) return { value: '' };
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(normalized);
+    if (!hostnamePattern.test(url.hostname)) return null;
+    return { value: normalized };
+  } catch {
+    return null;
+  }
 };
 
 const validateContacts = () => {
@@ -266,6 +286,7 @@ const resetForm = () => {
   city.value = '';
   country.value = '';
   pc.value = '';
+  website.value = '';
   x.value = '';
   y.value = '';
   contacts.value = [emptyContact()];
@@ -298,6 +319,10 @@ const goNext = () => {
     stepError.value = t('addCompanyForm.stepErrorCompany');
     return;
   }
+  if (currentStep.value === 1 && !validateWebsite()) {
+    stepError.value = t('addCompanyForm.stepErrorWebsite');
+    return;
+  }
   if (currentStep.value === 2 && !validateContacts()) {
     stepError.value = t('addCompanyForm.stepErrorContacts');
     return;
@@ -328,16 +353,20 @@ const submitForm = async () => {
   if (isLoading.value) return;
 
   const company = validateCompany();
+  const validWebsite = validateWebsite();
   const validContacts = validateContacts();
   const validMission = validateMission();
   const validReview = validateReview();
 
-  if (!company || !validContacts || !validMission || !validReview) {
+  if (!company || !validWebsite || !validContacts || !validMission || !validReview) {
     stepError.value = t('addCompanyForm.stepErrorGeneric');
     return;
   }
 
   company.mission = validMission;
+  if (validWebsite.value) {
+    company.website = validWebsite.value;
+  }
   if (!validReview.skipped) {
     company.review = { rating: validReview.rating, comment: validReview.comment };
   }
@@ -431,6 +460,10 @@ const handleReject = async () => {
         <div class="form-group">
           <label for="name">{{ t('addCompanyForm.companyName') }}</label>
           <input id="name" v-model="name" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label for="website">{{ t('addCompanyForm.companyWebsite') }}</label>
+          <input id="website" v-model="website" type="text" maxlength="300" placeholder="https://..." />
         </div>
         <div class="form-group">
           <label for="country">{{ t('addCompanyForm.companyState') }}</label>
