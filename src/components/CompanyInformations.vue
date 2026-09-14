@@ -43,6 +43,10 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
     <p><strong>Ville :</strong> {{ company.city }}</p>
     <p><strong>Pays :</strong> {{ company.country }}</p>
     <p><strong>Code Postal :</strong> {{ company.pc }}</p>
+    <p v-if="company.website">
+      <strong>Site :</strong>
+      <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
+    </p>
 
     <section v-if="company.mission" class="info-section">
       <h3>{{ t('companyInformations.missionTitle') }}</h3>

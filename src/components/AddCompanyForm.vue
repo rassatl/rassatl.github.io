@@ -24,6 +24,11 @@ const props = defineProps({ pendingCompany: { type: Object, default: null } });
 
 const emit = defineEmits(['refresh', 'close']);
 
+// En mode révision, l'admin doit pouvoir juger l'ensemble de la proposition
+// d'un coup d'œil pour décider de valider ou refuser : on affiche donc
+// toutes les sections en même temps plutôt que de les cacher étape par étape.
+const isReviewMode = computed(() => !!props.pendingCompany);
+
 // --- Étape 1 : entreprise + emplacement ---------------------------------
 const speciality = ref(props.pendingCompany?.speciality ?? '');
 const name = ref(props.pendingCompany?.name ?? '');
@@ -31,6 +36,7 @@ const address = ref(props.pendingCompany?.address ?? '');
 const city = ref(props.pendingCompany?.city ?? '');
 const pc = ref(props.pendingCompany?.pc ?? '');
 const country = ref(props.pendingCompany?.country ?? '');
+const website = ref(props.pendingCompany?.website ?? '');
 const x = ref(props.pendingCompany?.x ?? '');
 const y = ref(props.pendingCompany?.y ?? '');
 
@@ -91,6 +97,25 @@ const validateCompany = () => {
   }
 
   return { ...fields, x: latitude, y: longitude };
+};
+
+// Le site web est facultatif ; s'il est renseigné, on le normalise (ajoute
+// https:// si absent) et on vérifie qu'il s'agit d'une URL valide. new URL()
+// seul ne suffit pas : certains moteurs (Chromium) acceptent des hôtes
+// contenant des espaces sans lever d'erreur, d'où la vérification du nom
+// d'hôte en plus.
+const hostnamePattern = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+const validateWebsite = () => {
+  const raw = website.value.trim();
+  if (!raw) return { value: '' };
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(normalized);
+    if (!hostnamePattern.test(url.hostname)) return null;
+    return { value: normalized };
+  } catch {
+    return null;
+  }
 };
 
 const validateContacts = () => {
@@ -261,6 +286,7 @@ const resetForm = () => {
   city.value = '';
   country.value = '';
   pc.value = '';
+  website.value = '';
   x.value = '';
   y.value = '';
   contacts.value = [emptyContact()];
@@ -275,12 +301,26 @@ const resetForm = () => {
   isPinPlaced.value = false;
 };
 
+// Gère la soumission du formulaire : en mode révision tout est déjà visible,
+// donc "Valider" soumet directement ; sinon on avance étape par étape.
+const handleSubmit = () => {
+  if (isReviewMode.value) {
+    submitForm();
+  } else {
+    goNext();
+  }
+};
+
 // Avance à l'étape suivante si l'étape courante est valide, ou soumet le
 // formulaire depuis la dernière étape.
 const goNext = () => {
   stepError.value = '';
   if (currentStep.value === 1 && !validateCompany()) {
     stepError.value = t('addCompanyForm.stepErrorCompany');
+    return;
+  }
+  if (currentStep.value === 1 && !validateWebsite()) {
+    stepError.value = t('addCompanyForm.stepErrorWebsite');
     return;
   }
   if (currentStep.value === 2 && !validateContacts()) {
@@ -313,16 +353,20 @@ const submitForm = async () => {
   if (isLoading.value) return;
 
   const company = validateCompany();
+  const validWebsite = validateWebsite();
   const validContacts = validateContacts();
   const validMission = validateMission();
   const validReview = validateReview();
 
-  if (!company || !validContacts || !validMission || !validReview) {
+  if (!company || !validWebsite || !validContacts || !validMission || !validReview) {
     stepError.value = t('addCompanyForm.stepErrorGeneric');
     return;
   }
 
   company.mission = validMission;
+  if (validWebsite.value) {
+    company.website = validWebsite.value;
+  }
   if (!validReview.skipped) {
     company.review = { rating: validReview.rating, comment: validReview.comment };
   }
@@ -388,10 +432,10 @@ const handleReject = async () => {
       <p>{{ t('addCompanyForm.pendingSubmittedText') }}</p>
       <button type="button" class="submit-button" @click="emit('close')">{{ t('addCompanyForm.closeButton') }}</button>
     </div>
-    <form v-else class="form-container" @submit.prevent="goNext">
+    <form v-else class="form-container" @submit.prevent="handleSubmit">
       <h2>{{ pendingCompany ? t('addCompanyForm.reviewTitle') : t('addCompanyForm.addCompany') }}</h2>
 
-      <ol class="step-indicator">
+      <ol v-if="!isReviewMode" class="step-indicator">
         <li
           v-for="(label, index) in stepLabels"
           :key="label"
@@ -403,7 +447,8 @@ const handleReject = async () => {
       </ol>
 
       <!-- Étape 1 : entreprise -->
-      <div v-show="currentStep === 1">
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[0] }}</h3>
+      <div v-show="isReviewMode || currentStep === 1">
         <div class="form-group">
           <label for="speciality">{{ t('addCompanyForm.schoolSpeciality') }}</label>
           <select id="speciality" v-model="speciality">
@@ -415,6 +460,10 @@ const handleReject = async () => {
         <div class="form-group">
           <label for="name">{{ t('addCompanyForm.companyName') }}</label>
           <input id="name" v-model="name" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label for="website">{{ t('addCompanyForm.companyWebsite') }}</label>
+          <input id="website" v-model="website" type="text" maxlength="300" placeholder="https://..." />
         </div>
         <div class="form-group">
           <label for="country">{{ t('addCompanyForm.companyState') }}</label>
@@ -440,7 +489,8 @@ const handleReject = async () => {
       </div>
 
       <!-- Étape 2 : contact(s) -->
-      <div v-show="currentStep === 2">
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[1] }}</h3>
+      <div v-show="isReviewMode || currentStep === 2">
         <p class="step-hint">{{ t('addCompanyForm.contactsHint') }}</p>
         <div v-for="(contact, index) in contacts" :key="index" class="contact-block">
           <div class="contact-block-header">
@@ -480,7 +530,8 @@ const handleReject = async () => {
       </div>
 
       <!-- Étape 3 : mission -->
-      <div v-show="currentStep === 3">
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[2] }}</h3>
+      <div v-show="isReviewMode || currentStep === 3">
         <div class="form-group">
           <label for="mission">{{ t('addCompanyForm.missionLabel') }}</label>
           <p class="step-hint">{{ t('addCompanyForm.missionHint') }}</p>
@@ -489,7 +540,8 @@ const handleReject = async () => {
       </div>
 
       <!-- Étape 4 : avis -->
-      <div v-show="currentStep === 4">
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[3] }}</h3>
+      <div v-show="isReviewMode || currentStep === 4">
         <p class="step-hint">{{ t('addCompanyForm.reviewHint') }}</p>
         <div class="form-group">
           <label>{{ t('addCompanyForm.reviewRatingLabel') }}</label>
@@ -504,11 +556,11 @@ const handleReject = async () => {
       <p v-if="stepError" class="step-error">{{ stepError }}</p>
 
       <div class="wizard-actions">
-        <button v-if="currentStep > 1" type="button" class="prev-button" @click="goPrev">
+        <button v-if="!isReviewMode && currentStep > 1" type="button" class="prev-button" @click="goPrev">
           {{ t('addCompanyForm.previousButton') }}
         </button>
         <button type="submit" class="submit-button">
-          {{ currentStep < totalSteps
+          {{ !isReviewMode && currentStep < totalSteps
             ? t('addCompanyForm.nextButton')
             : (pendingCompany ? t('addCompanyForm.validateButton') : t('addCompanyForm.addCompanyButton')) }}
         </button>
@@ -518,7 +570,7 @@ const handleReject = async () => {
       </button>
     </form>
 
-    <div class="mini-map-wrapper" v-show="currentStep === 1">
+    <div class="mini-map-wrapper" v-show="isReviewMode || currentStep === 1">
       <div class="mini-map" ref="mapContainer"></div>
       <p class="map-hint">
         {{ isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint') }}
@@ -533,6 +585,7 @@ const handleReject = async () => {
 .form-map-wrapper {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 50px;
 }
 
@@ -551,9 +604,17 @@ select {
   padding: 25px;
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* width (pas seulement max-width) : sans taille explicite, un flex item
+     shrink-to-fit se redimensionne selon son contenu — une longue phrase
+     d'erreur sur une seule ligne pouvait élargir toute la modale d'un coup. */
+  width: 500px;
   max-width: 500px;
+  flex-shrink: 0;
+  max-height: 80vh;
+  overflow-y: auto;
   margin: 0 auto;
   font-family: 'Segoe UI', sans-serif;
+  box-sizing: border-box;
 }
 
 h2 {
@@ -597,6 +658,20 @@ h2 {
   justify-content: center;
   font-size: 12px;
   font-weight: bold;
+}
+
+.review-section-title {
+  color: var(--red-esigelec);
+  border-top: 2px solid var(--gray-white-light);
+  padding-top: 14px;
+  margin: 14px 0 10px 0;
+  font-size: 1em;
+}
+
+.review-section-title:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 .step-indicator li.active .step-number,
@@ -803,6 +878,11 @@ input:focus, textarea:focus {
     align-items: center;
     max-height: 80vh;
     overflow-y: auto;
+  }
+  .form-container {
+    width: 100%;
+    max-height: none;
+    overflow-y: visible;
   }
   .mini-map-wrapper {
     width: 100%;

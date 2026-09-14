@@ -5,7 +5,7 @@ service cloud.firestore {
 
     function isValidCompanyData(data) {
       return data.keys().hasOnly([
-        'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y', 'mission', 'review'
+        'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y', 'mission', 'review', 'website'
       ])
       && data.speciality in [
         'Développement Logiciel, Tests et Qualité', 'IA & Big Data'
@@ -34,7 +34,8 @@ service cloud.firestore {
       && data.mission is string
       && data.mission.size() > 0
       && data.mission.size() <= 1000
-      && (!('review' in data) || isValidReview(data.review));
+      && (!('review' in data) || isValidReview(data.review))
+      && (!('website' in data) || (data.website is string && data.website.size() <= 300));
     }
 
     function isValidReview(review) {
