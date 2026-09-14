@@ -585,7 +585,7 @@ const handleReject = async () => {
 .form-map-wrapper {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 50px;
 }
 
