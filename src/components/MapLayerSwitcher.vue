@@ -43,7 +43,7 @@ const handleSelect = (key) => {
 <style scoped>
 .layer-switcher {
   position: fixed;
-  top: 12px;
+  bottom: 12px;
   right: 12px;
   z-index: 1000;
   display: flex;
