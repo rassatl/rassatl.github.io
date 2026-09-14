@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, inject } from 'vue';
+import { ref, reactive, watch, onMounted, inject, computed } from 'vue';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import L from 'leaflet';
@@ -10,11 +10,12 @@ import { getCountryList } from '../countries.js'
 import { iconForSpeciality } from '../mapIcons';
 import { useAuth } from '../useAuth.js'
 import { usePendingCompanies } from '../usePendingCompanies.js'
+import StarRating from './StarRating.vue'
 
 const t = inject('t')
 const countryList = ref([]);
 const { isAdmin } = useAuth();
-const { submitPending, approve, reject: rejectPending } = usePendingCompanies();
+const { submitPending, approve, addCompanyDirectly, reject: rejectPending, fetchContacts } = usePendingCompanies();
 
 // Quand une proposition en attente est fournie, le formulaire passe en mode
 // "révision" : il est pré-rempli et permet de la modifier avant de valider
@@ -22,6 +23,8 @@ const { submitPending, approve, reject: rejectPending } = usePendingCompanies();
 const props = defineProps({ pendingCompany: { type: Object, default: null } });
 
 const emit = defineEmits(['refresh', 'close']);
+
+// --- Étape 1 : entreprise + emplacement ---------------------------------
 const speciality = ref(props.pendingCompany?.speciality ?? '');
 const name = ref(props.pendingCompany?.name ?? '');
 const address = ref(props.pendingCompany?.address ?? '');
@@ -30,8 +33,32 @@ const pc = ref(props.pendingCompany?.pc ?? '');
 const country = ref(props.pendingCompany?.country ?? '');
 const x = ref(props.pendingCompany?.x ?? '');
 const y = ref(props.pendingCompany?.y ?? '');
+
+// --- Étape 2 : contact(s) -------------------------------------------------
+const emptyContact = () => ({ firstName: '', lastName: '', role: '', email: '', phone: '' });
+const contacts = ref([emptyContact()]);
+
+// --- Étape 3 : mission ----------------------------------------------------
+const mission = ref(props.pendingCompany?.mission ?? '');
+
+// --- Étape 4 : avis ---------------------------------------------------
+const review = reactive({
+  rating: props.pendingCompany?.review?.rating ?? 0,
+  comment: props.pendingCompany?.review?.comment ?? '',
+});
+
 const isLoading = ref(false);
 const submissionDone = ref(false);
+const currentStep = ref(1);
+const totalSteps = 4;
+const stepError = ref('');
+
+const stepLabels = computed(() => [
+  t('addCompanyForm.step1Label'),
+  t('addCompanyForm.step2Label'),
+  t('addCompanyForm.step3Label'),
+  t('addCompanyForm.step4Label'),
+]);
 
 const allowedSpecialities = new Set([
   'Développement Logiciel, Tests et Qualité',
@@ -39,6 +66,7 @@ const allowedSpecialities = new Set([
 ]);
 
 const normalizeText = (value, maxLength) => value.trim().replace(/\s+/g, ' ').slice(0, maxLength);
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const validateCompany = () => {
   const fields = {
@@ -63,6 +91,37 @@ const validateCompany = () => {
   }
 
   return { ...fields, x: latitude, y: longitude };
+};
+
+const validateContacts = () => {
+  if (contacts.value.length === 0) return null;
+  const cleaned = [];
+  for (const contact of contacts.value) {
+    const firstName = normalizeText(contact.firstName, 100);
+    const lastName = normalizeText(contact.lastName, 100);
+    const role = normalizeText(contact.role, 150);
+    const email = contact.email.trim();
+    const phone = normalizeText(contact.phone ?? '', 30);
+    if (!firstName || !lastName || !role || !emailPattern.test(email)) {
+      return null;
+    }
+    cleaned.push({ firstName, lastName, role, email, phone });
+  }
+  return cleaned;
+};
+
+const validateMission = () => {
+  const cleaned = normalizeText(mission.value, 1000);
+  return cleaned ? cleaned : null;
+};
+
+// L'avis est facultatif : sans note ni commentaire, l'étape est simplement
+// ignorée. Un commentaire sans note n'a pas de sens et est donc refusé.
+const validateReview = () => {
+  const comment = normalizeText(review.comment, 500);
+  if (!review.rating && !comment) return { skipped: true };
+  if (!review.rating) return null;
+  return { skipped: false, rating: review.rating, comment };
 };
 
 let map = null;
@@ -102,7 +161,16 @@ watch(speciality, (newSpeciality) => {
   }
 });
 
-onMounted(() => {
+// La mini-carte est cachée (v-show) sur les étapes 2 à 4 : Leaflet calcule
+// mal ses tuiles pendant qu'un conteneur est en display:none, il faut donc
+// recalculer sa taille à chaque retour sur l'étape 1.
+watch(currentStep, (step) => {
+  if (step === 1 && map) {
+    setTimeout(() => map.invalidateSize(), 0);
+  }
+});
+
+onMounted(async () => {
   map = L.map(mapContainer.value, {
     center: [46.656066, 0.364419],
     zoom: 5,
@@ -120,9 +188,16 @@ onMounted(() => {
   map.on('click', (e) => placeMarker(e.latlng));
 
   // En mode révision, on affiche directement la position déjà soumise
-  // plutôt que de relancer une recherche d'adresse.
+  // plutôt que de relancer une recherche d'adresse, et on récupère les
+  // contacts déjà associés à cette proposition.
   if (props.pendingCompany) {
     placeMarker(L.latLng(props.pendingCompany.x, props.pendingCompany.y), { recenter: true });
+    const existingContacts = await fetchContacts('pendingCompanies', props.pendingCompany.id);
+    if (existingContacts.length > 0) {
+      contacts.value = existingContacts.map(({ firstName, lastName, role, email, phone }) => ({
+        firstName, lastName, role, email, phone: phone ?? ''
+      }));
+    }
   }
 
   // Récupération de la liste des pays depuis le fichier countries.js
@@ -171,6 +246,14 @@ watch([address, city, pc, country], ([newAddress, newCity, newPc, newCountry]) =
   }, 500);
 });
 
+const addContact = () => {
+  contacts.value.push(emptyContact());
+};
+const removeContact = (index) => {
+  if (contacts.value.length <= 1) return;
+  contacts.value.splice(index, 1);
+};
+
 const resetForm = () => {
   speciality.value = '';
   name.value = '';
@@ -180,11 +263,47 @@ const resetForm = () => {
   pc.value = '';
   x.value = '';
   y.value = '';
+  contacts.value = [emptyContact()];
+  mission.value = '';
+  review.rating = 0;
+  review.comment = '';
+  currentStep.value = 1;
   if (marker) {
     marker.remove();
     marker = null;
   }
   isPinPlaced.value = false;
+};
+
+// Avance à l'étape suivante si l'étape courante est valide, ou soumet le
+// formulaire depuis la dernière étape.
+const goNext = () => {
+  stepError.value = '';
+  if (currentStep.value === 1 && !validateCompany()) {
+    stepError.value = t('addCompanyForm.stepErrorCompany');
+    return;
+  }
+  if (currentStep.value === 2 && !validateContacts()) {
+    stepError.value = t('addCompanyForm.stepErrorContacts');
+    return;
+  }
+  if (currentStep.value === 3 && !validateMission()) {
+    stepError.value = t('addCompanyForm.stepErrorMission');
+    return;
+  }
+
+  if (currentStep.value < totalSteps) {
+    currentStep.value += 1;
+  } else {
+    submitForm();
+  }
+};
+
+const goPrev = () => {
+  stepError.value = '';
+  if (currentStep.value > 1) {
+    currentStep.value -= 1;
+  }
 };
 
 // Fonction pour soumettre le formulaire : ajoute directement l'entreprise si
@@ -194,9 +313,18 @@ const submitForm = async () => {
   if (isLoading.value) return;
 
   const company = validateCompany();
-  if (!company) {
-    alert("Les informations saisies sont invalides.");
+  const validContacts = validateContacts();
+  const validMission = validateMission();
+  const validReview = validateReview();
+
+  if (!company || !validContacts || !validMission || !validReview) {
+    stepError.value = t('addCompanyForm.stepErrorGeneric');
     return;
+  }
+
+  company.mission = validMission;
+  if (!validReview.skipped) {
+    company.review = { rating: validReview.rating, comment: validReview.comment };
   }
 
   isLoading.value = true;
@@ -218,17 +346,17 @@ const submitForm = async () => {
     }
 
     if (props.pendingCompany) {
-      await approve(props.pendingCompany.id, company);
+      await approve(props.pendingCompany.id, company, validContacts);
       resetForm();
       emit('refresh');
       emit('close');
     } else if (isAdmin.value) {
-      await addDoc(collection(db, 'companies'), company);
+      await addCompanyDirectly(company, validContacts);
       resetForm();
       emit('refresh');
       emit('close');
     } else {
-      await submitPending(company);
+      await submitPending(company, validContacts);
       submissionDone.value = true;
     }
   } catch (e) {
@@ -260,50 +388,137 @@ const handleReject = async () => {
       <p>{{ t('addCompanyForm.pendingSubmittedText') }}</p>
       <button type="button" class="submit-button" @click="emit('close')">{{ t('addCompanyForm.closeButton') }}</button>
     </div>
-    <form v-else class="form-container" @submit.prevent="submitForm">
+    <form v-else class="form-container" @submit.prevent="goNext">
       <h2>{{ pendingCompany ? t('addCompanyForm.reviewTitle') : t('addCompanyForm.addCompany') }}</h2>
-      <div class="form-group">
-        <label for="speciality">{{ t('addCompanyForm.schoolSpeciality') }}</label>
-        <select id="speciality" v-model="speciality" required>
-          <option disabled value="">{{ t('addCompanyForm.selectSpeciality') }}</option>
-          <option value="Développement Logiciel, Tests et Qualité">{{ t('addCompanyForm.dltq') }}</option>
-          <option value="IA & Big Data">{{ t('addCompanyForm.iabd') }}</option>
-        </select>
+
+      <ol class="step-indicator">
+        <li
+          v-for="(label, index) in stepLabels"
+          :key="label"
+          :class="{ active: currentStep === index + 1, done: currentStep > index + 1 }"
+        >
+          <span class="step-number">{{ index + 1 }}</span>
+          <span class="step-label">{{ label }}</span>
+        </li>
+      </ol>
+
+      <!-- Étape 1 : entreprise -->
+      <div v-show="currentStep === 1">
+        <div class="form-group">
+          <label for="speciality">{{ t('addCompanyForm.schoolSpeciality') }}</label>
+          <select id="speciality" v-model="speciality">
+            <option disabled value="">{{ t('addCompanyForm.selectSpeciality') }}</option>
+            <option value="Développement Logiciel, Tests et Qualité">{{ t('addCompanyForm.dltq') }}</option>
+            <option value="IA & Big Data">{{ t('addCompanyForm.iabd') }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="name">{{ t('addCompanyForm.companyName') }}</label>
+          <input id="name" v-model="name" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label for="country">{{ t('addCompanyForm.companyState') }}</label>
+          <select id="country" v-model="country">
+            <option disabled value="">{{ t('addCompanyForm.selectCompanyState') }}</option>
+            <option v-for="[code, name] in countryList" :key="code" :value="name">
+              {{ name }}
+            </option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
+          <input id="address" v-model="address" maxlength="200" />
+        </div>
+        <div class="form-group">
+          <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
+          <input id="city" v-model="city" maxlength="100" />
+        </div>
+        <div class="form-group">
+          <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
+          <input id="pc" v-model="pc" maxlength="20" />
+        </div>
       </div>
-      <div class="form-group">
-        <label for="name">{{ t('addCompanyForm.companyName') }}</label>
-        <input id="name" v-model="name" maxlength="120" required />
+
+      <!-- Étape 2 : contact(s) -->
+      <div v-show="currentStep === 2">
+        <p class="step-hint">{{ t('addCompanyForm.contactsHint') }}</p>
+        <div v-for="(contact, index) in contacts" :key="index" class="contact-block">
+          <div class="contact-block-header">
+            <h3>{{ t('addCompanyForm.contactN') }} {{ index + 1 }}</h3>
+            <button
+              v-if="contacts.length > 1"
+              type="button"
+              class="remove-contact-button"
+              @click="removeContact(index)"
+            >{{ t('addCompanyForm.removeContact') }}</button>
+          </div>
+          <div class="form-group">
+            <label :for="`contact-firstName-${index}`">{{ t('addCompanyForm.contactFirstName') }}</label>
+            <input :id="`contact-firstName-${index}`" v-model="contact.firstName" maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label :for="`contact-lastName-${index}`">{{ t('addCompanyForm.contactLastName') }}</label>
+            <input :id="`contact-lastName-${index}`" v-model="contact.lastName" maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label :for="`contact-role-${index}`">{{ t('addCompanyForm.contactRole') }}</label>
+            <input :id="`contact-role-${index}`" v-model="contact.role" maxlength="150" />
+          </div>
+          <div class="form-group">
+            <label :for="`contact-email-${index}`">{{ t('addCompanyForm.contactEmail') }}</label>
+            <input :id="`contact-email-${index}`" v-model="contact.email" type="email" maxlength="200" />
+          </div>
+          <div class="form-group">
+            <label :for="`contact-phone-${index}`">{{ t('addCompanyForm.contactPhone') }}</label>
+            <input :id="`contact-phone-${index}`" v-model="contact.phone" type="tel" maxlength="30" />
+          </div>
+        </div>
+        <button type="button" class="add-contact-button" @click="addContact">
+          {{ t('addCompanyForm.addContact') }}
+        </button>
+        <p class="privacy-note">{{ t('addCompanyForm.contactsPrivacyNote') }}</p>
       </div>
-      <div class="form-group">
-        <label for="country">{{ t('addCompanyForm.companyState') }}</label>
-        <select id="country" v-model="country" required>
-          <option disabled value="">{{ t('addCompanyForm.selectCompanyState') }}</option>
-          <option v-for="[code, name] in countryList" :key="code" :value="name">
-            {{ name }}
-          </option>
-        </select>
+
+      <!-- Étape 3 : mission -->
+      <div v-show="currentStep === 3">
+        <div class="form-group">
+          <label for="mission">{{ t('addCompanyForm.missionLabel') }}</label>
+          <p class="step-hint">{{ t('addCompanyForm.missionHint') }}</p>
+          <textarea id="mission" v-model="mission" maxlength="1000" rows="8"></textarea>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
-        <input id="address" v-model="address" maxlength="200" required />
+
+      <!-- Étape 4 : avis -->
+      <div v-show="currentStep === 4">
+        <p class="step-hint">{{ t('addCompanyForm.reviewHint') }}</p>
+        <div class="form-group">
+          <label>{{ t('addCompanyForm.reviewRatingLabel') }}</label>
+          <StarRating v-model="review.rating" />
+        </div>
+        <div class="form-group">
+          <label for="review-comment">{{ t('addCompanyForm.reviewCommentLabel') }}</label>
+          <textarea id="review-comment" v-model="review.comment" maxlength="500" rows="5"></textarea>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
-        <input id="city" v-model="city" maxlength="100" required />
+
+      <p v-if="stepError" class="step-error">{{ stepError }}</p>
+
+      <div class="wizard-actions">
+        <button v-if="currentStep > 1" type="button" class="prev-button" @click="goPrev">
+          {{ t('addCompanyForm.previousButton') }}
+        </button>
+        <button type="submit" class="submit-button">
+          {{ currentStep < totalSteps
+            ? t('addCompanyForm.nextButton')
+            : (pendingCompany ? t('addCompanyForm.validateButton') : t('addCompanyForm.addCompanyButton')) }}
+        </button>
       </div>
-      <div class="form-group">
-        <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
-        <input id="pc" v-model="pc" maxlength="20" required />
-      </div>
-      <button type="submit" class="submit-button">
-        {{ pendingCompany ? t('addCompanyForm.validateButton') : t('addCompanyForm.addCompanyButton') }}
-      </button>
       <button v-if="pendingCompany" type="button" class="reject-button" @click="handleReject">
         {{ t('addCompanyForm.rejectButton') }}
       </button>
     </form>
 
-    <div class="mini-map-wrapper">
+    <div class="mini-map-wrapper" v-show="currentStep === 1">
       <div class="mini-map" ref="mapContainer"></div>
       <p class="map-hint">
         {{ isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint') }}
@@ -347,6 +562,67 @@ h2 {
   margin-bottom: 20px;
 }
 
+.step-indicator {
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  gap: 4px;
+}
+
+.step-indicator li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  opacity: 0.5;
+}
+
+.step-indicator li.active,
+.step-indicator li.done {
+  opacity: 1;
+}
+
+.step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--gray-white-light);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.step-indicator li.active .step-number,
+.step-indicator li.done .step-number {
+  background: var(--red-esigelec);
+}
+
+.step-label {
+  font-size: 0.7em;
+  color: var(--gray-dark);
+  font-weight: 600;
+}
+
+.step-hint {
+  font-size: 0.85em;
+  color: var(--gray-dark);
+  margin: 0 0 12px 0;
+}
+
+.step-error {
+  color: var(--red-esigelec);
+  font-size: 0.85em;
+  text-align: center;
+  margin: 10px 0 0 0;
+}
+
 .form-group {
   margin-bottom: 15px;
 }
@@ -358,7 +634,7 @@ label {
   color: var(--gray-dark);
 }
 
-input {
+input, textarea {
   width: 90%;
   padding: 8px 12px;
   border: 2px solid var(--gray-white-light);
@@ -367,11 +643,86 @@ input {
   transition: border 0.2s;
   background-color: var(--white);
   color: var(--gray-dark);
+  font-family: inherit;
+  resize: vertical;
 }
 
-input:focus {
+input:focus, textarea:focus {
   border-color: var(--red-esigelec);
   outline: none;
+}
+
+.contact-block {
+  border: 1px solid var(--gray-white-light);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.contact-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.contact-block-header h3 {
+  margin: 0;
+  font-size: 1em;
+  color: var(--red-esigelec);
+}
+
+.remove-contact-button {
+  background: none;
+  border: none;
+  color: var(--red-esigelec);
+  font-size: 0.8em;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.add-contact-button {
+  background: transparent;
+  color: var(--red-esigelec);
+  border: 2px dashed var(--red-esigelec);
+  border-radius: 6px;
+  padding: 8px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.privacy-note {
+  font-size: 0.75em;
+  color: var(--gray-dark);
+  font-style: italic;
+  margin: 0;
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.prev-button {
+  background-color: transparent;
+  color: var(--red-esigelec);
+  border: 2px solid var(--red-esigelec);
+  border-radius: 6px;
+  padding: 10px;
+  flex: 1;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.prev-button:hover {
+  background-color: var(--red-esigelec);
+  color: var(--white);
 }
 
 .submit-button {
@@ -380,6 +731,7 @@ input:focus {
   border: none;
   border-radius: 6px;
   padding: 10px;
+  flex: 2;
   width: 100%;
   font-size: 16px;
   font-weight: bold;
@@ -458,6 +810,9 @@ input:focus {
   .mini-map {
     width: 100%;
     height: 300px;
+  }
+  .step-label {
+    display: none;
   }
 }
 
