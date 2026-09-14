@@ -590,7 +590,7 @@ const handleReject = async () => {
 }
 
 select {
-  width: 100%;
+  width: 90%;
   padding: 8px 12px;
   border: 2px solid var(--gray-white-light);
   border-radius: 6px;
