@@ -604,7 +604,12 @@ select {
   padding: 25px;
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* width (pas seulement max-width) : sans taille explicite, un flex item
+     shrink-to-fit se redimensionne selon son contenu — une longue phrase
+     d'erreur sur une seule ligne pouvait élargir toute la modale d'un coup. */
+  width: 500px;
   max-width: 500px;
+  flex-shrink: 0;
   max-height: 80vh;
   overflow-y: auto;
   margin: 0 auto;
@@ -875,6 +880,7 @@ input:focus, textarea:focus {
     overflow-y: auto;
   }
   .form-container {
+    width: 100%;
     max-height: none;
     overflow-y: visible;
   }
