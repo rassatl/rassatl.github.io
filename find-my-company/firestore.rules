@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidCompanyData(data) {
+      return data.keys().hasOnly([
+        'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y'
+      ])
+      && data.speciality in [
+        'Développement Logiciel, Tests et Qualité', 'IA & Big Data'
+      ]
+      && data.name is string
+      && data.name.size() > 0
+      && data.name.size() <= 120
+      && data.address is string
+      && data.address.size() > 0
+      && data.address.size() <= 200
+      && data.city is string
+      && data.city.size() > 0
+      && data.city.size() <= 100
+      && data.country is string
+      && data.country.size() > 0
+      && data.country.size() <= 100
+      && data.pc is string
+      && data.pc.size() > 0
+      && data.pc.size() <= 20
+      && data.x is number
+      && data.x >= -90
+      && data.x <= 90
+      && data.y is number
+      && data.y >= -180
+      && data.y <= 180;
+    }
+
+    // Entreprises validées, visibles publiquement sur la carte. Elles ne
+    // peuvent être créées que par un administrateur connecté : soit
+    // directement, soit via la validation d'une proposition en attente.
+    match /companies/{companyId} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidCompanyData(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Propositions d'ajout soumises par n'importe qui (y compris des
+    // visiteurs non connectés), en attente de validation par un admin.
+    // Seul un administrateur connecté peut les lire, les modifier ou les
+    // supprimer (refus, ou nettoyage après validation).
+    match /pendingCompanies/{pendingId} {
+      allow read: if request.auth != null;
+      allow create: if isValidCompanyData(request.resource.data);
+      allow update: if request.auth != null && isValidCompanyData(request.resource.data);
+      allow delete: if request.auth != null;
+    }
+  }
+}
