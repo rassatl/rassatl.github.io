@@ -585,12 +585,12 @@ const handleReject = async () => {
 .form-map-wrapper {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 50px;
 }
 
 select {
-  width: 100%;
+  width: 90%;
   padding: 8px 12px;
   border: 2px solid var(--gray-white-light);
   border-radius: 6px;
