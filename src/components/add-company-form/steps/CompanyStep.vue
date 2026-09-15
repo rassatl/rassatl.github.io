@@ -1,5 +1,5 @@
 <script setup>
-import { inject } from 'vue'
+import { inject, ref, watch } from 'vue'
 
 // Étape 1 de l'assistant : identité et adresse de l'entreprise. Ne gère pas
 // la carte (voir MiniMap.vue) mais lit x/y pour la validation finale, la
@@ -27,6 +27,77 @@ const allowedSpecialities = new Set([
 ]);
 
 const normalizeText = (value, maxLength) => value.trim().replace(/\s+/g, ' ').slice(0, maxLength);
+
+const stripAccents = (value) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Saisie de l'adresse en deux modes au choix : un champ unique "adresse
+// complète" (plus rapide à coller depuis Google Maps par ex.) ou les champs
+// détaillés séparés. Les deux alimentent les mêmes address/city/pc/country.
+// En mode révision (proposition déjà pré-remplie), on démarre sur les champs
+// détaillés pour ne pas masquer les données déjà présentes.
+const addressMode = ref(address.value ? 'fields' : 'full');
+const fullAddress = ref('');
+
+// La ville et le code postal peuvent être dans le même segment, dans les
+// deux ordres ("Casablanca 20250" ou "20250 Casablanca") : on repère le
+// code postal comme le token contenant un chiffre, le reste forme la ville.
+const parseCityAndPc = (segment) => {
+  const tokens = segment.split(/\s+/).filter(Boolean);
+  const pcIndex = tokens.findIndex(token => /\d/.test(token));
+  if (pcIndex === -1) return { city: segment, pc: '' };
+  return {
+    city: tokens.filter((_, i) => i !== pcIndex).join(' '),
+    pc: tokens[pcIndex],
+  };
+};
+
+// Retrouve le pays officiel correspondant dans la liste (comparaison sans
+// accents/casse, avec repli sur une correspondance partielle pour accepter
+// un nom court comme "Maroc" face à un nom officiel plus long).
+const matchCountry = (rawCountry) => {
+  const normalized = stripAccents(rawCountry);
+  if (!normalized) return '';
+  const exact = props.countryList.find(([, name]) => stripAccents(name) === normalized);
+  if (exact) return exact[1];
+  const partial = props.countryList.find(([, name]) => {
+    const normalizedName = stripAccents(name);
+    return normalizedName.includes(normalized) || normalized.includes(normalizedName);
+  });
+  return partial ? partial[1] : rawCountry;
+};
+
+// Découpe "adresse, ville cp, pays" (ou "adresse, cp ville, pays") et
+// répercute le résultat sur les champs détaillés existants.
+watch(fullAddress, (value) => {
+  const parts = value.split(',').map(part => part.trim()).filter(Boolean);
+  if (parts.length === 0) return;
+
+  if (parts.length >= 3) {
+    country.value = matchCountry(parts[parts.length - 1]);
+    const { city: parsedCity, pc: parsedPc } = parseCityAndPc(parts[parts.length - 2]);
+    city.value = parsedCity;
+    pc.value = parsedPc;
+    address.value = parts.slice(0, parts.length - 2).join(', ');
+  } else if (parts.length === 2) {
+    const { city: parsedCity, pc: parsedPc } = parseCityAndPc(parts[1]);
+    city.value = parsedCity;
+    pc.value = parsedPc;
+    address.value = parts[0];
+  } else {
+    address.value = parts[0];
+  }
+});
+
+// Bascule entre les deux modes de saisie, en reconstituant l'un depuis
+// l'autre s'il n'a pas encore été rempli.
+const switchAddressMode = (mode) => {
+  if (mode === addressMode.value) return;
+  if (mode === 'full' && !fullAddress.value) {
+    const cityPc = [city.value, pc.value].filter(Boolean).join(' ');
+    fullAddress.value = [address.value, cityPc, country.value].filter(Boolean).join(', ');
+  }
+  addressMode.value = mode;
+};
 
 // Le site web est facultatif ; s'il est renseigné, on le normalise (ajoute
 // https:// si absent) et on vérifie qu'il s'agit d'une URL valide. new URL()
@@ -117,18 +188,42 @@ defineExpose({ validateFields });
       </option>
     </select>
   </div>
-  <div class="form-group">
-    <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
-    <input id="address" v-model="address" maxlength="200" />
+  <div class="address-mode-tabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      :aria-selected="addressMode === 'full'"
+      :class="{ active: addressMode === 'full' }"
+      @click="switchAddressMode('full')"
+    >{{ t('addCompanyForm.addressModeFull') }}</button>
+    <button
+      type="button"
+      role="tab"
+      :aria-selected="addressMode === 'fields'"
+      :class="{ active: addressMode === 'fields' }"
+      @click="switchAddressMode('fields')"
+    >{{ t('addCompanyForm.addressModeFields') }}</button>
   </div>
-  <div class="form-group">
-    <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
-    <input id="city" v-model="city" maxlength="100" />
+
+  <div v-if="addressMode === 'full'" class="form-group">
+    <label for="fullAddress">{{ t('addCompanyForm.fullAddress') }}</label>
+    <input id="fullAddress" v-model="fullAddress" maxlength="300" :placeholder="t('addCompanyForm.fullAddressPlaceholder')" />
   </div>
-  <div class="form-group">
-    <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
-    <input id="pc" v-model="pc" maxlength="20" />
-  </div>
+
+  <template v-else>
+    <div class="form-group">
+      <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
+      <input id="address" v-model="address" maxlength="200" />
+    </div>
+    <div class="form-group">
+      <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
+      <input id="city" v-model="city" maxlength="100" />
+    </div>
+    <div class="form-group">
+      <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
+      <input id="pc" v-model="pc" maxlength="20" />
+    </div>
+  </template>
 </template>
 
 <style scoped>
@@ -170,5 +265,38 @@ select {
   font-size: 14px;
   background-color: var(--white);
   transition: border 0.2s;
+}
+
+.address-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background-color: var(--gray-white-light);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.address-mode-tabs button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-dark);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.address-mode-tabs button.active {
+  background-color: var(--red-esigelec);
+  color: var(--white);
+}
+
+.field-hint {
+  margin: 6px 0 0 0;
+  font-size: 0.8em;
+  color: var(--gray-dark);
 }
 </style>

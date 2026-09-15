@@ -21,10 +21,21 @@ const y = defineModel('y', { default: '' })
 
 const mapContainer = ref(null);
 const isPinPlaced = ref(false);
+const streetNotFound = ref(false);
 let map = null;
 let marker = null;
 let addressDebounceTimeout = null;
 const isLoading = ref(false);
+
+const geocode = async (params) => {
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ ...params, format: 'json' })}`, {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'FindMyCompany/1.0 (lou.rassat2003@gmail.com)'
+    }
+  });
+  return response.json();
+};
 
 const activeLayerKey = ref('standard');
 let layerInstances = {};
@@ -59,6 +70,7 @@ const placeMarker = (latlng, { recenter = false } = {}) => {
   }
 
   isPinPlaced.value = true;
+  streetNotFound.value = false;
   x.value = latlng.lat;
   y.value = latlng.lng;
 
@@ -129,28 +141,28 @@ watch(() => [props.address, props.city, props.pc, props.country], ([newAddress, 
     }
 
     isLoading.value = true;
+    streetNotFound.value = false;
     try {
-      const params = new URLSearchParams({
-        street: newAddress,
-        city: newCity,
-        postalcode: newPc,
-        country: newCountry,
-        format: 'json'
-      });
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'FindMyCompany/1.0 (lou.rassat2003@gmail.com)'
-        }
-      });
-
-      const results = await response.json();
+      const results = await geocode({ street: newAddress, city: newCity, postalcode: newPc, country: newCountry });
 
       if (results && results.length > 0) {
         const { lat, lon } = results[0];
         placeMarker(L.latLng(lat, lon), { recenter: true });
+        return;
+      }
+
+      // La rue exacte n'est pas toujours indexée dans OpenStreetMap (rue peu
+      // cartographiée, orthographe différente...) : on retente sans elle pour
+      // au moins centrer la carte sur la bonne ville, l'utilisateur plaçant
+      // ensuite le point à la main plutôt que de rester sur la carte de France.
+      console.warn("Aucun résultat pour cette adresse, nouvelle tentative sans la rue.");
+      const cityResults = await geocode({ city: newCity, postalcode: newPc, country: newCountry });
+      if (cityResults && cityResults.length > 0) {
+        const { lat, lon } = cityResults[0];
+        map.setView(L.latLng(lat, lon), 13);
+        streetNotFound.value = true;
       } else {
-        console.warn("Aucun résultat pour cette adresse.");
+        console.warn("Aucun résultat non plus pour la ville seule.");
       }
     } catch (error) {
       console.error("Erreur lors de l'appel à Nominatim:", error);
@@ -176,8 +188,10 @@ defineExpose({ invalidateSize });
       <div class="mini-map" ref="mapContainer"></div>
       <MapLayerSwitcher :layers="layerOptions" :active="activeLayerKey" @select="selectLayer" />
     </div>
-    <p class="map-hint">
-      {{ isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint') }}
+    <p class="map-hint" :class="{ 'map-hint-warning': streetNotFound && !isPinPlaced }">
+      {{ streetNotFound && !isPinPlaced
+        ? t('addCompanyForm.mapStreetNotFoundHint')
+        : (isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint')) }}
     </p>
   </div>
 </template>
@@ -224,6 +238,11 @@ defineExpose({ invalidateSize });
   font-size: 0.85em;
   color: var(--gray-dark);
   text-align: center;
+}
+
+.map-hint-warning {
+  color: var(--red-esigelec);
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {
