@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch, onMounted, inject } from 'vue';
+import { ref, watch, onMounted, inject, computed } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-control-geocoder';
 import { iconForSpeciality } from '../../../utils/mapIcons';
+import MapLayerSwitcher from '../../map/MapLayerSwitcher.vue';
 
 const t = inject('t')
 const props = defineProps({
@@ -24,6 +25,23 @@ let map = null;
 let marker = null;
 let addressDebounceTimeout = null;
 const isLoading = ref(false);
+
+const activeLayerKey = ref('standard');
+let layerInstances = {};
+const layerOptions = computed(() => [
+  { key: 'standard', label: t('mapLayers.standard'), thumbnail: 'https://a.tile.openstreetmap.org/5/16/11.png' },
+  { key: 'satellite', label: t('mapLayers.satellite'), thumbnail: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/11/16' },
+  { key: 'dark', label: t('mapLayers.dark'), thumbnail: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/5/11/16' },
+  { key: 'terrain', label: t('mapLayers.terrain'), thumbnail: 'https://a.tile.opentopomap.org/5/16/11.png' },
+]);
+
+// Change le fond de carte affiché.
+function selectLayer(key) {
+  if (key === activeLayerKey.value || !layerInstances[key]) return;
+  map.removeLayer(layerInstances[activeLayerKey.value]);
+  map.addLayer(layerInstances[key]);
+  activeLayerKey.value = key;
+}
 
 // Pose ou déplace le repère et synchronise les coordonnées du formulaire.
 // Utilisé aussi bien par le géocodage automatique que par un ajustement
@@ -65,9 +83,30 @@ onMounted(() => {
     worldCopyJump: false,
   });
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+  // Plusieurs fonds de carte au choix (standard, satellite, sombre, relief),
+  // comme sur la carte principale (voir MapView.vue).
+  const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+  });
+
+  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    maxZoom: 19,
+  });
+
+  const darkLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS user community',
+    maxZoom: 16,
+  });
+
+  const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors, SRTM | &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+    maxZoom: 17,
+  });
+
+  layerInstances = { standard: standardLayer, satellite: satelliteLayer, dark: darkLayer, terrain: terrainLayer };
+  standardLayer.addTo(map);
 
   // Permet à l'utilisateur d'ajuster ou de placer le point manuellement
   // en cliquant directement sur la carte d'aperçu.
@@ -133,7 +172,10 @@ defineExpose({ invalidateSize });
 
 <template>
   <div class="mini-map-wrapper">
-    <div class="mini-map" ref="mapContainer"></div>
+    <div class="mini-map-container">
+      <div class="mini-map" ref="mapContainer"></div>
+      <MapLayerSwitcher :layers="layerOptions" :active="activeLayerKey" @select="selectLayer" />
+    </div>
     <p class="map-hint">
       {{ isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint') }}
     </p>
@@ -149,17 +191,32 @@ defineExpose({ invalidateSize });
   flex-shrink: 0;
 }
 
-.mini-map {
-  width: 100%;
+.mini-map-container {
+  position: relative;
   flex: 1 1 auto;
   min-height: 300px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  cursor: crosshair;
   /* Les panes internes de Leaflet montent jusqu'à z-index:700 ; sans ceci,
      ces valeurs remontent hors de la carte et passent devant le bouton de
      fermeture de la modale (z-index:10). isolation:isolate les enferme ici. */
   isolation: isolate;
+}
+
+.mini-map {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  cursor: crosshair;
+}
+
+/* MapLayerSwitcher est en position:fixed par défaut (pensé pour la carte
+   plein écran) : ici on le rattache au conteneur de la mini-carte pour
+   éviter qu'il se superpose au sélecteur de la carte principale visible
+   derrière la modale. */
+.mini-map-container :deep(.layer-switcher) {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
 }
 
 .map-hint {

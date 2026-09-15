@@ -69,7 +69,10 @@ const validateFields = () => {
   if (!/^[0-9A-Za-zÀ-ÿ][0-9A-Za-zÀ-ÿ\s-]{1,19}$/.test(fields.pc)) {
     return { data: null, error: 'company' };
   }
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+  // props.x/y valent '' tant qu'aucun point n'a été placé sur la carte :
+  // Number('') vaut 0, une coordonnée valide (Null Island) qui passerait
+  // sinon la validation sans qu'un point ait réellement été posé.
+  if (props.x === '' || props.y === '' || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
     return { data: null, error: 'company' };
   }
 
