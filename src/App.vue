@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import ListeDeroulante from './components/ListeDeroulante.vue'
 import MapComponent from './components/MapView.vue'
 import HideContactInfo from './components/HideContactInfo.vue'
+import SiteInfo from './components/SiteInfo.vue'
 
 // État centralisé pour l'ouverture de la sidebar
 const isOpen = ref(true)
@@ -31,6 +32,7 @@ const hideContactParts = (() => {
     :token="hideContactParts.token"
   />
   <template v-else>
+    <SiteInfo />
     <ListeDeroulante
       :isOpen="isOpen"
       :visibleCompanies="visibleCompanies"
