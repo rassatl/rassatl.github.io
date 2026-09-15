@@ -56,6 +56,12 @@ const onOverlayClick = (event) => {
   padding: 20px;
   width: var(--modal-width, auto);
   height: var(--modal-height, auto);
+  /* Avec une largeur/hauteur fixée par --modal-width/--modal-height, un
+     contenu plus grand qu'elles (zoom navigateur, longue liste de
+     contacts...) débordait visuellement de la boîte au lieu d'y scroller. */
+  max-width: 92vw;
+  max-height: 90vh;
+  overflow-y: auto;
   border-radius: 8px;
   position: relative;
   box-sizing: border-box;
