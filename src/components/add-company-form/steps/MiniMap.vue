@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, inject, computed } from 'vue';
+import { ref, watch, onMounted, inject, computed, nextTick } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-control-geocoder';
@@ -14,6 +14,10 @@ const props = defineProps({
   pc: { type: String, default: '' },
   country: { type: String, default: '' },
   pendingCompany: { type: Object, default: null },
+  // Incrémenté par le parent à chaque clic sur "Suivant" tant qu'aucun point
+  // n'est placé, pour rejouer l'animation d'alerte à chaque tentative plutôt
+  // qu'une seule fois.
+  missingPinAttempt: { type: Number, default: 0 },
 });
 
 const x = defineModel('x', { default: '' })
@@ -22,6 +26,20 @@ const y = defineModel('y', { default: '' })
 const mapContainer = ref(null);
 const isPinPlaced = ref(false);
 const streetNotFound = ref(false);
+// Reste vrai tant qu'aucun point n'est placé, pour garder la carte et le
+// texte en rouge entre deux tentatives ; `pinAlertPulse` ne sert lui qu'à
+// rejouer l'animation à chaque nouvelle tentative (voir watch plus bas).
+const missingPinWarning = computed(() => props.missingPinAttempt > 0 && !isPinPlaced.value);
+const pinAlertPulse = ref(false);
+watch(() => props.missingPinAttempt, async (value, previous) => {
+  if (value <= previous) return;
+  // On retire puis rajoute la classe d'animation pour la rejouer à chaque
+  // clic sur "Suivant" : sans ce détour, une classe déjà présente ne
+  // redéclenche pas l'animation CSS.
+  pinAlertPulse.value = false;
+  await nextTick();
+  requestAnimationFrame(() => { pinAlertPulse.value = true; });
+});
 let map = null;
 let marker = null;
 let addressDebounceTimeout = null;
@@ -184,14 +202,18 @@ defineExpose({ invalidateSize });
 
 <template>
   <div class="mini-map-wrapper">
-    <div class="mini-map-container">
+    <div class="mini-map-container" :class="{ 'missing-pin': missingPinWarning, pulse: pinAlertPulse }">
       <div class="mini-map" ref="mapContainer"></div>
       <MapLayerSwitcher :layers="layerOptions" :active="activeLayerKey" @select="selectLayer" />
     </div>
-    <p class="map-hint" :class="{ 'map-hint-warning': streetNotFound && !isPinPlaced }">
+    <p
+      class="map-hint"
+      :class="{ 'map-hint-warning': (streetNotFound || missingPinWarning) && !isPinPlaced, pulse: (streetNotFound && !isPinPlaced) || pinAlertPulse }"
+    >
+      <svg v-if="(streetNotFound || missingPinWarning) && !isPinPlaced" class="warning-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       {{ streetNotFound && !isPinPlaced
         ? t('addCompanyForm.mapStreetNotFoundHint')
-        : (isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint')) }}
+        : (missingPinWarning ? t('addCompanyForm.mapMissingPinHint') : (isPinPlaced ? t('addCompanyForm.mapAdjustHint') : t('addCompanyForm.mapPlaceHint'))) }}
     </p>
   </div>
 </template>
@@ -221,6 +243,22 @@ defineExpose({ invalidateSize });
   border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   cursor: crosshair;
+  transition: outline-color 0.2s ease;
+  outline: 3px solid transparent;
+  outline-offset: 2px;
+}
+
+.mini-map-container.missing-pin .mini-map {
+  outline-color: var(--red-esigelec);
+}
+
+.mini-map-container.pulse .mini-map {
+  animation: pin-outline-pulse 1.2s ease-in-out 2;
+}
+
+@keyframes pin-outline-pulse {
+  0%, 100% { outline-color: var(--red-esigelec); }
+  50% { outline-color: transparent; }
 }
 
 /* MapLayerSwitcher est en position:fixed par défaut (pensé pour la carte
@@ -238,11 +276,33 @@ defineExpose({ invalidateSize });
   font-size: 0.85em;
   color: var(--gray-dark);
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .map-hint-warning {
   color: var(--red-esigelec);
-  font-weight: 600;
+  font-weight: 700;
+  background-color: #fdeeee;
+  border: 1px solid var(--red-esigelec);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.map-hint.pulse {
+  animation: hint-attention 0.4s ease-in-out 2;
+}
+
+.warning-icon {
+  flex-shrink: 0;
+}
+
+@keyframes hint-attention {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
 }
 
 @media (max-width: 768px) {

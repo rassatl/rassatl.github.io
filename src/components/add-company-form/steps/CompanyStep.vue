@@ -1,5 +1,5 @@
 <script setup>
-import { inject, ref, watch } from 'vue'
+import { inject, ref, watch, computed } from 'vue'
 
 // Étape 1 de l'assistant : identité et adresse de l'entreprise. Ne gère pas
 // la carte (voir MiniMap.vue) mais lit x/y pour la validation finale, la
@@ -88,14 +88,10 @@ watch(fullAddress, (value) => {
   }
 });
 
-// Bascule entre les deux modes de saisie, en reconstituant l'un depuis
-// l'autre s'il n'a pas encore été rempli.
+// Bascule entre les deux modes de saisie. Ne reconstitue pas l'un depuis
+// l'autre : chaque champ garde son propre contenu tel quel entre deux
+// bascules, sans pré-remplissage automatique.
 const switchAddressMode = (mode) => {
-  if (mode === addressMode.value) return;
-  if (mode === 'full' && !fullAddress.value) {
-    const cityPc = [city.value, pc.value].filter(Boolean).join(' ');
-    fullAddress.value = [address.value, cityPc, country.value].filter(Boolean).join(', ');
-  }
   addressMode.value = mode;
 };
 
@@ -118,11 +114,31 @@ const validateWebsite = () => {
   }
 };
 
+// Passe à true dès qu'une tentative de validation a échoué, pour afficher
+// les champs en erreur en rouge (voir computed ci-dessous) au lieu de
+// laisser l'utilisateur deviner lesquels sont incomplets.
+const attempted = ref(false);
+
+const pcPattern = /^[0-9A-Za-zÀ-ÿ][0-9A-Za-zÀ-ÿ\s-]{1,19}$/;
+
+const specialityInvalid = computed(() => attempted.value && !allowedSpecialities.has(speciality.value));
+const nameInvalid = computed(() => attempted.value && !normalizeText(name.value, 120));
+const countryInvalid = computed(() => attempted.value && !normalizeText(country.value, 100));
+const addressInvalid = computed(() => attempted.value && !normalizeText(address.value, 200));
+const cityInvalid = computed(() => attempted.value && !normalizeText(city.value, 100));
+const pcInvalid = computed(() => attempted.value && (!normalizeText(pc.value, 20) || !pcPattern.test(normalizeText(pc.value, 20))));
+// En mode "adresse complète", on ne montre pas les champs détaillés : le
+// champ unique est marqué en erreur si l'un des champs qu'il alimente
+// est encore incomplet.
+const fullAddressInvalid = computed(() => attempted.value && (addressInvalid.value || cityInvalid.value || pcInvalid.value));
+const websiteInvalid = computed(() => attempted.value && !validateWebsite());
+
 // Valide les champs de l'entreprise (hors vérification réseau des
 // coordonnées, faite par le parent uniquement à la soumission finale).
 // Retourne { data, error } : error vaut 'company' ou 'website' en cas
 // d'échec, sinon null.
 const validateFields = () => {
+  attempted.value = true;
   const fields = {
     speciality: speciality.value,
     name: normalizeText(name.value, 120),
@@ -165,7 +181,7 @@ defineExpose({ validateFields });
 <template>
   <div class="form-group">
     <label for="speciality">{{ t('addCompanyForm.schoolSpeciality') }}</label>
-    <select id="speciality" v-model="speciality">
+    <select id="speciality" v-model="speciality" :class="{ invalid: specialityInvalid }">
       <option disabled value="">{{ t('addCompanyForm.selectSpeciality') }}</option>
       <option value="Développement Logiciel, Tests et Qualité">{{ t('addCompanyForm.dltq') }}</option>
       <option value="IA & Big Data">{{ t('addCompanyForm.iabd') }}</option>
@@ -173,15 +189,16 @@ defineExpose({ validateFields });
   </div>
   <div class="form-group">
     <label for="name">{{ t('addCompanyForm.companyName') }}</label>
-    <input id="name" v-model="name" maxlength="120" />
+    <input id="name" v-model="name" maxlength="120" :class="{ invalid: nameInvalid }" />
   </div>
   <div class="form-group">
     <label for="website">{{ t('addCompanyForm.companyWebsite') }}</label>
-    <input id="website" v-model="website" type="text" maxlength="300" placeholder="https://..." />
+    <input id="website" v-model="website" type="text" maxlength="300" placeholder="https://..." :class="{ invalid: websiteInvalid }" />
+    <p v-if="websiteInvalid" class="field-error">{{ t('addCompanyForm.stepErrorWebsite') }}</p>
   </div>
   <div class="form-group">
     <label for="country">{{ t('addCompanyForm.companyState') }}</label>
-    <select id="country" v-model="country">
+    <select id="country" v-model="country" :class="{ invalid: countryInvalid }">
       <option disabled value="">{{ t('addCompanyForm.selectCompanyState') }}</option>
       <option v-for="[code, countryName] in countryList" :key="code" :value="countryName">
         {{ countryName }}
@@ -207,21 +224,21 @@ defineExpose({ validateFields });
 
   <div v-if="addressMode === 'full'" class="form-group">
     <label for="fullAddress">{{ t('addCompanyForm.fullAddress') }}</label>
-    <input id="fullAddress" v-model="fullAddress" maxlength="300" :placeholder="t('addCompanyForm.fullAddressPlaceholder')" />
+    <input id="fullAddress" v-model="fullAddress" maxlength="300" :placeholder="t('addCompanyForm.fullAddressPlaceholder')" :class="{ invalid: fullAddressInvalid }" />
   </div>
 
   <template v-else>
     <div class="form-group">
       <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
-      <input id="address" v-model="address" maxlength="200" />
+      <input id="address" v-model="address" maxlength="200" :class="{ invalid: addressInvalid }" />
     </div>
     <div class="form-group">
       <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
-      <input id="city" v-model="city" maxlength="100" />
+      <input id="city" v-model="city" maxlength="100" :class="{ invalid: cityInvalid }" />
     </div>
     <div class="form-group">
       <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
-      <input id="pc" v-model="pc" maxlength="20" />
+      <input id="pc" v-model="pc" maxlength="20" :class="{ invalid: pcInvalid }" />
     </div>
   </template>
 </template>
@@ -298,5 +315,18 @@ select {
   margin: 6px 0 0 0;
   font-size: 0.8em;
   color: var(--gray-dark);
+}
+
+input.invalid,
+select.invalid {
+  border-color: var(--red-esigelec);
+  background-color: #fdeeee;
+}
+
+.field-error {
+  margin: 6px 0 0 0;
+  font-size: 0.8em;
+  color: var(--red-esigelec);
+  font-weight: 600;
 }
 </style>

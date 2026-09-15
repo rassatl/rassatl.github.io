@@ -46,6 +46,15 @@ const submissionDone = ref(false);
 const currentStep = ref(1);
 const totalSteps = 4;
 const stepError = ref('');
+// Incrémenté à chaque tentative de passage à l'étape suivante (ou de
+// soumission) sans point placé sur la carte : attire l'œil vers la carte,
+// en rejouant l'animation à chaque nouveau clic plutôt qu'une seule fois.
+const pinMissingAttempt = ref(0);
+
+// Le point est considéré comme placé dès que x/y sont renseignés.
+watch([x, y], ([newX, newY]) => {
+  if (newX !== '' && newY !== '') pinMissingAttempt.value = 0;
+});
 
 const stepLabels = computed(() => [
   t('addCompanyForm.step1Label'),
@@ -96,6 +105,7 @@ const goNext = () => {
     const { error } = companyStepRef.value.validateFields();
     if (error) {
       stepError.value = t(companyStepErrorKeys[error]);
+      if (error === 'company' && (x.value === '' || y.value === '')) pinMissingAttempt.value += 1;
       return;
     }
   }
@@ -135,6 +145,7 @@ const submitForm = async () => {
 
   if (error || !validContacts || !validMission || !validReview) {
     stepError.value = t('addCompanyForm.stepErrorGeneric');
+    if (error === 'company' && (x.value === '' || y.value === '')) pinMissingAttempt.value += 1;
     return;
   }
 
@@ -270,6 +281,7 @@ const handleReject = async () => {
       :pc="pc"
       :country="country"
       :pending-company="pendingCompany"
+      :missing-pin-attempt="pinMissingAttempt"
     />
   </div>
 </template>
