@@ -5,9 +5,9 @@ import MapComponent from './components/map/MapView.vue'
 import HideContactInfo from './components/hide-contact/HideContactInfo.vue'
 import SiteInfo from './components/site-info/SiteInfo.vue'
 
-// État centralisé pour l'ouverture de la sidebar : fermée par défaut pour
-// laisser la carte visible dès l'arrivée sur le site.
-const isOpen = ref(false)
+// État centralisé pour l'ouverture de la sidebar : ouverte par défaut sur
+// ordinateur et tablette, fermée sur téléphone pour laisser la carte visible.
+const isOpen = ref(window.innerWidth > 768)
 const visibleCompanies = ref([])
 const selectedSpeciality = ref('');
 const mapRef = ref(null)
