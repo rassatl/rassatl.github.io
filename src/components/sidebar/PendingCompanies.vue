@@ -1,8 +1,8 @@
 <script setup>
 import { ref, inject } from 'vue'
-import { usePendingCompanies } from '../usePendingCompanies.js'
+import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 import CompanyItem from './CompanyItem.vue'
-import AddCompanyForm from './AddCompanyForm.vue'
+import AddCompanyForm from '../add-company-form/AddCompanyForm.vue'
 
 const t = inject('t')
 const { pendingCompanies, reject } = usePendingCompanies()

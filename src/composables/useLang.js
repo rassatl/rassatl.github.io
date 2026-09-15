@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { languages } from './lang'
+import { languages } from '../data/lang'
 
 const state = reactive({
   currentLang: localStorage.getItem('lang') || 'fr'

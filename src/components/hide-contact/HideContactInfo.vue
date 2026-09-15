@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, inject } from 'vue'
-import { db } from '../firebase'
+import { db } from '../../services/firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 
 const t = inject('t')

@@ -1,9 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import ListeDeroulante from './components/ListeDeroulante.vue'
-import MapComponent from './components/MapView.vue'
-import HideContactInfo from './components/HideContactInfo.vue'
-import SiteInfo from './components/SiteInfo.vue'
+import ListeDeroulante from './components/sidebar/ListeDeroulante.vue'
+import MapComponent from './components/map/MapView.vue'
+import HideContactInfo from './components/hide-contact/HideContactInfo.vue'
+import SiteInfo from './components/site-info/SiteInfo.vue'
 
 // État centralisé pour l'ouverture de la sidebar : fermée par défaut pour
 // laisser la carte visible dès l'arrivée sur le site.

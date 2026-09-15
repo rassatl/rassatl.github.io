@@ -1,8 +1,8 @@
 <script setup>
 import { ref, watch, inject } from 'vue'
-import { db } from '../firebase'
+import { db } from '../../services/firebase'
 import { collection, getDocs } from 'firebase/firestore'
-import StarRating from './StarRating.vue'
+import StarRating from '../common/StarRating.vue'
 
 const t = inject('t')
 const props = defineProps({

@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
 import 'leaflet/dist/leaflet.css'
-import { useLang } from './useLang.js'
+import { useLang } from './composables/useLang.js'
 
 const app = createApp(App)
 
