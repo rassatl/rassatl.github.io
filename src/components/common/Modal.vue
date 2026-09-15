@@ -10,12 +10,26 @@ defineProps({
 });
 
 const emit = defineEmits(['close']);
+
+// Une sélection de texte commencée dans le contenu peut se terminer (mouseup)
+// sur l'overlay si l'utilisateur glisse la souris en dehors : `click.self`
+// se déclencherait alors à tort. On ne ferme que si le clic a aussi
+// commencé sur l'overlay lui-même.
+let mousedownOnOverlay = false;
+const onOverlayMousedown = (event) => {
+  mousedownOnOverlay = event.target === event.currentTarget;
+};
+const onOverlayClick = (event) => {
+  if (mousedownOnOverlay && event.target === event.currentTarget) {
+    emit('close');
+  }
+};
 </script>
 
 <template>
   <!-- Utilisation de Teleport pour rendre le modal dans le body -->
   <Teleport to="body">
-    <div v-if="isOpen" class="modal-overlay" v-bind="$attrs" @click.self="emit('close')">
+    <div v-if="isOpen" class="modal-overlay" v-bind="$attrs" @mousedown="onOverlayMousedown" @click="onOverlayClick">
       <div class="modal-content">
         <button class="modal-close" @click="emit('close')">×</button>
         <slot></slot>
