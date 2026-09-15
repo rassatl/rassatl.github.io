@@ -1,15 +1,15 @@
 <script setup>
 import { onMounted, ref, computed, inject } from 'vue'
-import { db } from '../firebase'
+import { db } from '../../services/firebase'
 import { collection, getDocs } from 'firebase/firestore'
-import Modal from './Modal.vue';
-import AddCompanyForm from './AddCompanyForm.vue';
+import Modal from '../common/Modal.vue';
+import AddCompanyForm from '../add-company-form/AddCompanyForm.vue';
 import ListCompanies from './ListCompanies.vue';
-import LangSwitcher from './LangSwitcher.vue'
-import LoginForm from './LoginForm.vue'
+import LangSwitcher from '../common/LangSwitcher.vue'
+import LoginForm from '../auth/LoginForm.vue'
 import PendingCompanies from './PendingCompanies.vue'
-import { useAuth } from '../useAuth.js'
-import { usePendingCompanies } from '../usePendingCompanies.js'
+import { useAuth } from '../../composables/useAuth.js'
+import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 
 const isMobile = ref(false)
 const listeDeroulanteWidth = ref(400)

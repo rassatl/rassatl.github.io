@@ -1,6 +1,6 @@
 <script setup>
-import { useLang } from '../useLang.js'
-import { languages } from '../lang.js'
+import { useLang } from '../../composables/useLang.js'
+import { languages } from '../../data/lang.js'
 
 const { currentLang, changeLang } = useLang()
 

@@ -2,9 +2,9 @@
 import { onMounted, ref, computed, watch, inject } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { db } from '../firebase';
+import { db } from '../../services/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { iconForSpeciality } from '../mapIcons';
+import { iconForSpeciality } from '../../utils/mapIcons';
 import MapLayerSwitcher from './MapLayerSwitcher.vue';
 
 const t = inject('t')

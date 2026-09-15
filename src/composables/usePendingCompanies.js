@@ -1,5 +1,5 @@
 import { ref, watchEffect } from 'vue'
-import { db } from './firebase'
+import { db } from '../services/firebase'
 import { collection, onSnapshot, addDoc, doc, deleteDoc, getDocs } from 'firebase/firestore'
 import { useAuth } from './useAuth.js'
 import { useEmailNotifications } from './useEmailNotifications.js'

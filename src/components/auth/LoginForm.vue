@@ -1,6 +1,6 @@
 <script setup>
 import { ref, inject } from 'vue'
-import { useAuth } from '../useAuth.js'
+import { useAuth } from '../../composables/useAuth.js'
 
 const t = inject('t')
 const { login, logout, isAdmin, user } = useAuth()

@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { auth } from './firebase'
+import { auth } from '../services/firebase'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 
 const state = reactive({
