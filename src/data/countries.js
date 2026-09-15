@@ -6,5 +6,10 @@ countries.registerLocale(en);
 countries.registerLocale(fr);
 
 export function getCountryList(lang = 'fr') {
-  return countries.getNames(lang, { select: 'official' });
+  const names = countries.getNames(lang, { select: 'official' });
+  // getNames() renvoie les pays triés par code ISO, pas par nom : on retrie
+  // par ordre alphabétique du nom affiché (celui vu par l'utilisateur).
+  return Object.fromEntries(
+    Object.entries(names).sort(([, nameA], [, nameB]) => nameA.localeCompare(nameB, lang))
+  );
 }
