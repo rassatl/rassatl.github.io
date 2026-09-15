@@ -105,6 +105,10 @@ export const languages = {
       satellite: "Satellite",
       dark: "Sombre",
       terrain: "Relief"
+    },
+    siteInfo: {
+      label: "Informations sur le site",
+      lastUpdated: "Dernière mise à jour du site :"
     }
   },
   en: {
@@ -213,6 +217,10 @@ export const languages = {
       satellite: "Satellite",
       dark: "Dark",
       terrain: "Terrain"
+    },
+    siteInfo: {
+      label: "Site information",
+      lastUpdated: "Site last updated:"
     }
   }
 }
