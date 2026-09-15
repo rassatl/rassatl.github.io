@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
 
 const t = inject('t')
 const currentLang = inject('currentLang')
 const isOpen = ref(false)
+const root = ref(null)
 
 const formattedDate = computed(() => {
   const lang = currentLang?.currentLang ?? 'fr'
@@ -19,10 +20,20 @@ const formattedDate = computed(() => {
 
 const toggle = () => { isOpen.value = !isOpen.value }
 const close = () => { isOpen.value = false }
+
+// Sur tactile, il n'y a pas de mouseleave pour refermer le tooltip : un tap
+// n'importe où ailleurs sur la page doit donc le faire.
+const onDocumentClick = (event) => {
+  if (isOpen.value && root.value && !root.value.contains(event.target)) {
+    close()
+  }
+}
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 </script>
 
 <template>
-  <div class="site-info" @mouseleave="close">
+  <div ref="root" class="site-info" @mouseleave="close">
     <button
       type="button"
       class="info-button"
@@ -94,10 +105,24 @@ const close = () => { isOpen.value = false }
 }
 
 @media (max-width: 480px) {
+  .site-info {
+    top: 8px;
+    right: 8px;
+  }
+  /* Cible tactile d'au moins 44px (recommandation Apple/Google), au lieu
+     des 26px pensés pour un clic souris précis. */
+  .info-button {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
   .info-tooltip {
+    top: 50px;
     right: 0;
     white-space: normal;
-    max-width: 60vw;
+    width: max-content;
+    max-width: min(85vw, 300px);
+    font-size: 0.85em;
   }
 }
 </style>
