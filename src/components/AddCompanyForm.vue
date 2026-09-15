@@ -591,6 +591,7 @@ const handleReject = async () => {
 
 select {
   width: 90%;
+  box-sizing: border-box;
   padding: 8px 12px;
   border: 2px solid var(--gray-white-light);
   border-radius: 6px;
@@ -711,6 +712,11 @@ label {
 
 input, textarea {
   width: 90%;
+  /* <select> a box-sizing:border-box par défaut dans Chrome (padding et
+     bordure inclus dans la largeur), alors que <input>/<textarea> ont
+     content-box (padding et bordure ajoutés en plus) : à width identique,
+     ils ne mesuraient donc pas la même largeur réelle. */
+  box-sizing: border-box;
   padding: 8px 12px;
   border: 2px solid var(--gray-white-light);
   border-radius: 6px;
