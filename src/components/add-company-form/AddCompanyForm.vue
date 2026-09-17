@@ -3,6 +3,7 @@ import { ref, watch, onMounted, inject, computed } from 'vue';
 import { getCountryList } from '../../data/countries.js'
 import { useAuth } from '../../composables/useAuth.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
+import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import StepIndicator from './StepIndicator.vue'
 import CompanyStep from './steps/CompanyStep.vue'
 import MiniMap from './steps/MiniMap.vue'
@@ -13,6 +14,7 @@ import ReviewStep from './steps/ReviewStep.vue'
 const t = inject('t')
 const { isAdmin } = useAuth();
 const { submitPending, approve, addCompanyDirectly, reject: rejectPending } = usePendingCompanies();
+const { logError } = useErrorLogs();
 
 // Quand une proposition en attente est fournie, le formulaire passe en mode
 // "révision" : il est pré-rempli et permet de la modifier avant de valider
@@ -185,6 +187,7 @@ const submitForm = async () => {
     }
   } catch (e) {
     console.error("Erreur lors de l'ajout de l'entreprise : ", e);
+    logError(e, 'addCompanyForm:submit');
   } finally {
     isLoading.value = false;
   }
@@ -199,6 +202,7 @@ const handleReject = async () => {
     emit('close');
   } catch (e) {
     console.error("Erreur lors du refus de la proposition :", e);
+    logError(e, 'addCompanyForm:reject');
   } finally {
     isLoading.value = false;
   }

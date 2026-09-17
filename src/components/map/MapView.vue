@@ -6,8 +6,10 @@ import { db } from '../../services/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { iconForSpeciality } from '../../utils/mapIcons';
 import MapLayerSwitcher from './MapLayerSwitcher.vue';
+import { useErrorLogs } from '../../composables/useErrorLogs.js';
 
 const t = inject('t')
+const { logError } = useErrorLogs()
 const mapContainer = ref(null);
 const props = defineProps({selectedSpeciality: String});
 const emit = defineEmits(['update-visible-companies'])
@@ -115,6 +117,7 @@ const fetchCompaniesAndAddMarkers = async () => {
     companies.value = companyList
   } catch (error) {
     console.error('Erreur lors de la récupération des entreprises:', error);
+    logError(error, 'mapView:fetchCompanies');
   }
 };
 

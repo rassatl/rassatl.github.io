@@ -3,6 +3,7 @@ import { ref, watch, inject } from 'vue'
 import { db } from '../../services/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import StarRating from '../common/StarRating.vue'
+import { useErrorLogs } from '../../composables/useErrorLogs.js'
 
 const t = inject('t')
 const props = defineProps({
@@ -12,6 +13,7 @@ const props = defineProps({
   }
 })
 
+const { logError } = useErrorLogs()
 const contacts = ref([])
 const isLoadingContacts = ref(true)
 
@@ -27,6 +29,7 @@ const fetchContacts = async (companyId) => {
     contacts.value = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
   } catch (error) {
     console.error('Erreur lors de la récupération des contacts :', error)
+    logError(error, 'companyInformations:fetchContacts')
     contacts.value = []
   } finally {
     isLoadingContacts.value = false

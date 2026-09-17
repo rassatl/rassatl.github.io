@@ -154,5 +154,34 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if request.auth != null;
     }
+
+    function isValidErrorLogData(data) {
+      return data.keys().hasOnly(['message', 'code', 'stack', 'context', 'createdAt', 'pageUrl', 'userAgent'])
+        && data.message is string
+        && data.message.size() > 0
+        && data.message.size() <= 500
+        && (!('code' in data) || (data.code is string && data.code.size() <= 100))
+        && data.stack is string
+        && data.stack.size() <= 3000
+        && data.context is string
+        && data.context.size() <= 200
+        && data.createdAt is timestamp
+        && data.pageUrl is string
+        && data.pageUrl.size() <= 500
+        && data.userAgent is string
+        && data.userAgent.size() <= 300;
+    }
+
+    // Erreurs techniques rencontrées par n'importe quel visiteur, journalées
+    // automatiquement (pas de saisie utilisateur) pour pouvoir diagnostiquer
+    // un problème en prod sans dépendre de la console de son navigateur.
+    // Mêmes règles d'accès que les tickets : écriture publique, lecture et
+    // suppression réservées à un administrateur connecté.
+    match /errorLogs/{logId} {
+      allow read: if request.auth != null;
+      allow create: if isValidErrorLogData(request.resource.data);
+      allow update: if false;
+      allow delete: if request.auth != null;
+    }
   }
 }

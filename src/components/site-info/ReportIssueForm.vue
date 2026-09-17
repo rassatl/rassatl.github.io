@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, inject } from 'vue'
 import { useTickets } from '../../composables/useTickets.js'
+import { useErrorLogs } from '../../composables/useErrorLogs.js'
 
 const t = inject('t')
 const { submitTicket } = useTickets()
+const { logError } = useErrorLogs()
 const emit = defineEmits(['close'])
 
 const title = ref('')
@@ -25,6 +27,7 @@ const handleSubmit = async () => {
     submitted.value = true
   } catch (e) {
     console.error("Erreur lors de l'envoi du signalement :", e)
+    logError(e, 'reportIssueForm:submit')
   } finally {
     isLoading.value = false
   }

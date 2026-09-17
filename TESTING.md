@@ -39,13 +39,14 @@ Les tests ciblent la logique métier plutôt que le rendu visuel : validation de
 | `src/composables/useLang.js` | `useLang.test.js` | Résolution des clés de traduction imbriquées, fallback sur la clé si absente, changement de langue + persistance `localStorage` |
 | `src/composables/useEmailNotifications.js` | `useEmailNotifications.test.js` | Contenu de l'email envoyé (destinataire, lien "masquer mes infos"), envoi silencieusement ignoré si EmailJS n'est pas configuré, un échec d'envoi ne fait pas planter les autres |
 | `src/composables/useTickets.js` | `useTickets.test.js` | Comptage des tickets non fermés, payload de signalement (URL/user-agent tronqués), mise à jour du statut, suppression |
+| `src/composables/useErrorLogs.js` | `useErrorLogs.test.js` | Payload journalisé (message/stack/code/URL/user-agent), repli sur un message générique pour une valeur qui n'est pas une `Error`, silence si l'écriture Firestore elle-même échoue |
 | `src/components/common/StarRating.vue` | `StarRating.test.js` | Rendu du nombre d'étoiles, émission de la note cliquée, désélection en recliquant la même étoile, aucune émission en `readonly` |
 | `src/components/add-company-form/steps/CompanyStep.vue` | `CompanyStep.test.js` | Champs obligatoires, bornes de coordonnées GPS, format du code postal, normalisation d'URL (ajout de `https://`), parsing de l'adresse complète collée en un seul champ (`"12 rue de Paris, 75001 Paris, France"`) |
 | `src/components/add-company-form/steps/ContactsStep.vue` | `ContactsStep.test.js` | Champs obligatoires par contact, format d'email, normalisation des espaces, validation indépendante de chaque contact quand il y en a plusieurs |
 
 ## Pourquoi mocker Firebase et EmailJS
 
-`useTickets`, `useEmailNotifications` et (indirectement, via `ContactsStep`) `usePendingCompanies` dépendent de Firebase ou d'EmailJS. Dans leurs tests, ces dépendances sont remplacées par des mocks (`vi.mock`) :
+`useTickets`, `useEmailNotifications`, `useErrorLogs` et (indirectement, via `ContactsStep`) `usePendingCompanies` dépendent de Firebase ou d'EmailJS. Dans leurs tests, ces dépendances sont remplacées par des mocks (`vi.mock`) :
 
 - aucun appel réseau réel n'est fait, donc les tests sont rapides et déterministes ;
 - aucun secret (clé Firebase, clé EmailJS) n'est nécessaire pour lancer les tests, y compris en CI.
