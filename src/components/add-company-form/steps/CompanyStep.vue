@@ -126,7 +126,15 @@ const nameInvalid = computed(() => attempted.value && !normalizeText(name.value,
 const countryInvalid = computed(() => attempted.value && !normalizeText(country.value, 100));
 const addressInvalid = computed(() => attempted.value && !normalizeText(address.value, 200));
 const cityInvalid = computed(() => attempted.value && !normalizeText(city.value, 100));
-const pcInvalid = computed(() => attempted.value && (!normalizeText(pc.value, 20) || !pcPattern.test(normalizeText(pc.value, 20))));
+// Le code postal est facultatif : beaucoup d'entreprises hors de France
+// n'en ont pas d'équivalent fiable, ou une adresse collée telle quelle ne
+// l'inclut simplement pas (voir parseCityAndPc ci-dessus). On ne le
+// signale donc en erreur que s'il est rempli avec un format invalide.
+const pcInvalid = computed(() => {
+  if (!attempted.value) return false;
+  const value = normalizeText(pc.value, 20);
+  return value !== '' && !pcPattern.test(value);
+});
 // En mode "adresse complète", on ne montre pas les champs détaillés : le
 // champ unique est marqué en erreur si l'un des champs qu'il alimente
 // est encore incomplet.
@@ -150,10 +158,12 @@ const validateFields = () => {
   const latitude = Number(props.x);
   const longitude = Number(props.y);
 
-  if (!allowedSpecialities.has(fields.speciality) || Object.values(fields).some(value => !value)) {
+  // pc est volontairement exclu : facultatif (voir pcInvalid ci-dessus).
+  const requiredValues = [fields.name, fields.address, fields.city, fields.country];
+  if (!allowedSpecialities.has(fields.speciality) || requiredValues.some(value => !value)) {
     return { data: null, error: 'company' };
   }
-  if (!/^[0-9A-Za-zÀ-ÿ][0-9A-Za-zÀ-ÿ\s-]{1,19}$/.test(fields.pc)) {
+  if (fields.pc && !pcPattern.test(fields.pc)) {
     return { data: null, error: 'company' };
   }
   // props.x/y valent '' tant qu'aucun point n'a été placé sur la carte :
@@ -237,7 +247,7 @@ defineExpose({ validateFields });
       <input id="city" v-model="city" maxlength="100" :class="{ invalid: cityInvalid }" />
     </div>
     <div class="form-group">
-      <label for="pc">{{ t('addCompanyForm.companyPC') }}</label>
+      <label for="pc">{{ t('addCompanyForm.companyPC') }} ({{ t('addCompanyForm.optional') }})</label>
       <input id="pc" v-model="pc" maxlength="20" :class="{ invalid: pcInvalid }" />
     </div>
   </template>

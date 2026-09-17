@@ -154,14 +154,18 @@ onMounted(() => {
 watch(() => [props.address, props.city, props.pc, props.country], ([newAddress, newCity, newPc, newCountry]) => {
   clearTimeout(addressDebounceTimeout);
   addressDebounceTimeout = setTimeout(async () => {
-    if (![newAddress, newCity, newPc, newCountry].every(field => field.trim() !== '')) {
+    // Le code postal est facultatif (voir CompanyStep.vue) : de nombreuses
+    // adresses hors de France n'en ont pas d'équivalent fiable, il ne doit
+    // donc pas bloquer le géocodage automatique.
+    if (![newAddress, newCity, newCountry].every(field => field.trim() !== '')) {
       return;
     }
+    const pcParam = newPc.trim() !== '' ? { postalcode: newPc } : {};
 
     isLoading.value = true;
     streetNotFound.value = false;
     try {
-      const results = await geocode({ street: newAddress, city: newCity, postalcode: newPc, country: newCountry });
+      const results = await geocode({ street: newAddress, city: newCity, ...pcParam, country: newCountry });
 
       if (results && results.length > 0) {
         const { lat, lon } = results[0];
@@ -174,7 +178,7 @@ watch(() => [props.address, props.city, props.pc, props.country], ([newAddress, 
       // au moins centrer la carte sur la bonne ville, l'utilisateur plaçant
       // ensuite le point à la main plutôt que de rester sur la carte de France.
       console.warn("Aucun résultat pour cette adresse, nouvelle tentative sans la rue.");
-      const cityResults = await geocode({ city: newCity, postalcode: newPc, country: newCountry });
+      const cityResults = await geocode({ city: newCity, ...pcParam, country: newCountry });
       if (cityResults && cityResults.length > 0) {
         const { lat, lon } = cityResults[0];
         map.setView(L.latLng(lat, lon), 13);
