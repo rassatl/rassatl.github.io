@@ -8,8 +8,10 @@ import ListCompanies from './ListCompanies.vue';
 import LangSwitcher from '../common/LangSwitcher.vue'
 import LoginForm from '../auth/LoginForm.vue'
 import PendingCompanies from './PendingCompanies.vue'
+import TicketsList from './TicketsList.vue'
 import { useAuth } from '../../composables/useAuth.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
+import { useTickets } from '../../composables/useTickets.js'
 
 const isMobile = ref(false)
 const listeDeroulanteWidth = ref(400)
@@ -18,6 +20,7 @@ const listeDeroulanteDefaultSize = 0
 const t = inject('t')
 const { isAdmin } = useAuth()
 const { pendingCompanies } = usePendingCompanies()
+const { openCount: openTicketsCount } = useTickets()
 
 // Props et événements
 const props = defineProps({isOpen: Boolean, visibleCompanies: Array})
@@ -26,6 +29,7 @@ const emit = defineEmits(['toggle', 'update-speciality', 'company-added'])
 const isModalOpen = ref(false);
 const isLoginModalOpen = ref(false);
 const isPendingModalOpen = ref(false);
+const isTicketsModalOpen = ref(false);
 const companies = ref([])
 const selectedSpeciality = ref('')
 
@@ -60,6 +64,16 @@ const openPendingModal = () => {
 };
 const closePendingModal = () => {
   isPendingModalOpen.value = false;
+};
+
+const openTicketsModal = () => {
+  isTicketsModalOpen.value = true;
+  if (props.isOpen) {
+    emit('toggle');
+  }
+};
+const closeTicketsModal = () => {
+  isTicketsModalOpen.value = false;
 };
 
 // Filtre pour les entreprises selon la spécialité sélectionnée 
@@ -134,7 +148,15 @@ onMounted(fetchCompanies);
         </button>
       </div>
 
-      <!-- Bouton pour rafraîchir la liste des entreprises --> 
+      <!-- Bouton pour afficher les tickets signalés (admin uniquement) -->
+      <div v-if="props.isOpen && isAdmin" class="tickets-action">
+        <button @click="openTicketsModal" class="refresh-button" :aria-label="t('tickets.title')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-flag"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          <span v-if="openTicketsCount > 0" class="pending-badge">{{ openTicketsCount }}</span>
+        </button>
+      </div>
+
+      <!-- Bouton pour rafraîchir la liste des entreprises -->
       <div v-if="props.isOpen" class="refresh-action">
         <button @click="fetchCompanies" class="refresh-button" aria-label="Rafraîchir">⟳</button>
       </div>
@@ -179,6 +201,11 @@ onMounted(fetchCompanies);
     <!-- Fenêtre de validation des entreprises en attente (admin uniquement) -->
     <Modal :isOpen="isPendingModalOpen" @close="closePendingModal" style="--modal-width: 70%; --modal-height: 85%">
       <PendingCompanies @refresh="handleCompanyAdded" />
+    </Modal>
+
+    <!-- Fenêtre des tickets signalés (admin uniquement) -->
+    <Modal :isOpen="isTicketsModalOpen" @close="closeTicketsModal" style="--modal-width: 70%; --modal-height: 85%">
+      <TicketsList />
     </Modal>
 
     <!-- Bouton Ouverture/Fermeture sidebar -->
@@ -293,6 +320,11 @@ select {
   top: 0px;
   left: 30px;
 }
+.tickets-action {
+  position: absolute;
+  top: 0px;
+  left: 60px;
+}
 .connection-action {
   position: absolute;
   top: 0px;
@@ -360,7 +392,8 @@ select {
   color: #2e7d32;
 }
 
-.list-action .refresh-button {
+.list-action .refresh-button,
+.tickets-action .refresh-button {
   position: relative;
 }
 

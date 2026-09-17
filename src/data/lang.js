@@ -74,6 +74,11 @@ export const languages = {
       clickForDetails: "Cliquez pour plus d'informations"
     },
     companyInformations: {
+      specialityLabel: "Spécialité",
+      cityLabel: "Ville",
+      countryLabel: "Pays",
+      pcLabel: "Code Postal",
+      websiteLabel: "Site",
       missionTitle: "Mission",
       reviewTitle: "Avis",
       contactsTitle: "Contact",
@@ -119,6 +124,29 @@ export const languages = {
     siteInfo: {
       label: "Informations sur le site",
       lastUpdated: "Dernière mise à jour du site :"
+    },
+    reportIssue: {
+      openButton: "Signaler un problème",
+      title: "Signaler un problème",
+      fieldTitle: "Titre",
+      fieldDescription: "Description",
+      errorDescription: "Merci de décrire le problème rencontré.",
+      cancelButton: "Annuler",
+      sendButton: "Envoyer",
+      closeButton: "Fermer",
+      sentTitle: "Signalement envoyé",
+      sentText: "Merci, votre signalement a bien été transmis."
+    },
+    tickets: {
+      title: "Tickets signalés",
+      empty: "Aucun ticket signalé.",
+      delete: "Supprimer",
+      confirmDelete: "Supprimer définitivement ce ticket ?",
+      status: {
+        open: "Ouvert",
+        in_progress: "En cours",
+        closed: "Fermé"
+      }
     }
   },
   en: {
@@ -196,6 +224,11 @@ export const languages = {
       clickForDetails: "Click for more details"
     },
     companyInformations: {
+      specialityLabel: "Speciality",
+      cityLabel: "City",
+      countryLabel: "Country",
+      pcLabel: "Postal Code",
+      websiteLabel: "Website",
       missionTitle: "Mission",
       reviewTitle: "Review",
       contactsTitle: "Contact",
@@ -241,6 +274,29 @@ export const languages = {
     siteInfo: {
       label: "Site information",
       lastUpdated: "Site last updated:"
+    },
+    reportIssue: {
+      openButton: "Report a problem",
+      title: "Report a problem",
+      fieldTitle: "Title",
+      fieldDescription: "Description",
+      errorDescription: "Please describe the problem you encountered.",
+      cancelButton: "Cancel",
+      sendButton: "Send",
+      closeButton: "Close",
+      sentTitle: "Report sent",
+      sentText: "Thank you, your report has been sent."
+    },
+    tickets: {
+      title: "Reported tickets",
+      empty: "No reported tickets.",
+      delete: "Delete",
+      confirmDelete: "Permanently delete this ticket?",
+      status: {
+        open: "Open",
+        in_progress: "In progress",
+        closed: "Closed"
+      }
     }
   }
 }

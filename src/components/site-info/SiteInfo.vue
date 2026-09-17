@@ -1,9 +1,12 @@
 <script setup>
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
+import Modal from '../common/Modal.vue'
+import ReportIssueForm from './ReportIssueForm.vue'
 
 const t = inject('t')
 const currentLang = inject('currentLang')
 const isOpen = ref(false)
+const isReportOpen = ref(false)
 const root = ref(null)
 
 const formattedDate = computed(() => {
@@ -20,6 +23,14 @@ const formattedDate = computed(() => {
 
 const toggle = () => { isOpen.value = !isOpen.value }
 const close = () => { isOpen.value = false }
+
+// Ouvrir le formulaire de signalement referme d'abord l'infobulle : sinon
+// elle resterait affichée derrière la modale (Teleport dans <body>).
+const openReport = () => {
+  close()
+  isReportOpen.value = true
+}
+const closeReport = () => { isReportOpen.value = false }
 
 // Sur tactile, il n'y a pas de mouseleave pour refermer le tooltip : un tap
 // n'importe où ailleurs sur la page doit donc le faire.
@@ -44,8 +55,13 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
     <div v-if="isOpen" class="info-tooltip">
       <p>{{ t('siteInfo.lastUpdated') }}</p>
       <p class="date">{{ formattedDate }}</p>
+      <button type="button" class="report-issue-button" @click="openReport">{{ t('reportIssue.openButton') }}</button>
     </div>
   </div>
+
+  <Modal :isOpen="isReportOpen" @close="closeReport">
+    <ReportIssueForm @close="closeReport" />
+  </Modal>
 </template>
 
 <style scoped>
@@ -87,7 +103,12 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 
 .info-tooltip {
   position: absolute;
-  top: 32px;
+  /* top:100% (et non un décalage en px) colle le tooltip juste sous le
+     bouton, sans le moindre espace entre les deux : un espace, même petit,
+     crée une zone morte où la souris n'est plus au-dessus d'aucun élément
+     de .site-info, ce qui déclenche le mouseleave du conteneur et referme
+     le tooltip avant que la souris n'y arrive (cf. rapport utilisateur). */
+  top: 100%;
   right: 0;
   background: rgba(255, 255, 255, 0.97);
   color: var(--gray-dark);
@@ -108,6 +129,27 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
   margin-top: 2px;
 }
 
+.report-issue-button {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--red-esigelec);
+  border: 1.5px solid var(--red-esigelec);
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.report-issue-button:hover {
+  background-color: var(--red-esigelec);
+  color: var(--white);
+}
+
 @media (max-width: 480px) {
   .site-info {
     top: 8px;
@@ -121,7 +163,6 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
     font-size: 18px;
   }
   .info-tooltip {
-    top: 50px;
     right: 0;
     white-space: normal;
     width: max-content;

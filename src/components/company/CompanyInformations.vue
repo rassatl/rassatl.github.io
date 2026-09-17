@@ -39,12 +39,12 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
 <template>
   <div class="details">
     <h2>{{ company.name }}</h2>
-    <p><strong>Spécialité :</strong> {{ company.speciality }}</p>
-    <p><strong>Ville :</strong> {{ company.city }}</p>
-    <p><strong>Pays :</strong> {{ company.country }}</p>
-    <p v-if="company.pc"><strong>Code Postal :</strong> {{ company.pc }}</p>
+    <p><strong>{{ t('companyInformations.specialityLabel') }} :</strong> {{ company.speciality }}</p>
+    <p><strong>{{ t('companyInformations.cityLabel') }} :</strong> {{ company.city }}</p>
+    <p><strong>{{ t('companyInformations.countryLabel') }} :</strong> {{ company.country }}</p>
+    <p v-if="company.pc"><strong>{{ t('companyInformations.pcLabel') }} :</strong> {{ company.pc }}</p>
     <p v-if="company.website">
-      <strong>Site :</strong>
+      <strong>{{ t('companyInformations.websiteLabel') }} : </strong>
       <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
     </p>
 
