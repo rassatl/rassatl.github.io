@@ -72,7 +72,8 @@ Contrairement aux tests unitaires (qui mockent Firebase), les tests E2E font tou
 
 ### Prérequis
 
-Les émulateurs Firebase nécessitent un runtime **Java** (11+). `npm run test:e2e` télécharge et lance tout le reste automatiquement.
+- **Java** (11+) : requis par les émulateurs Firebase. `npm run test:e2e` télécharge et lance tout le reste automatiquement.
+- **Node 22+** : `firebase-admin` (utilisé pour peupler l'émulateur, voir `e2e/fixtures/`) entraîne `@google-cloud/firestore`, dont l'engine exige Node ≥22. C'est une dépendance optionnelle : sur une version plus ancienne, `npm install`/`npm ci` l'ignore silencieusement au lieu d'échouer, et l'erreur (`Cannot find module '@google-cloud/firestore'`) n'apparaît qu'au lancement des tests.
 
 ### Comment ça tourne
 

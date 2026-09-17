@@ -31,10 +31,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # firebase-admin (voir e2e/fixtures/emulator.js) entraîne
+      # @google-cloud/firestore, dont l'engine requiert Node >=22 : sur une
+      # version plus ancienne, npm l'ignore silencieusement (dépendance
+      # optionnelle) au lieu de faire échouer l'install, et l'erreur
+      # n'apparaît qu'au runtime ("Cannot find module").
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
 
