@@ -43,6 +43,7 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
   <div class="details">
     <h2>{{ company.name }}</h2>
     <p><strong>{{ t('companyInformations.specialityLabel') }} :</strong> {{ company.speciality }}</p>
+    <p><strong>{{ t('companyInformations.addressLabel') }} :</strong> {{ company.address }}</p>
     <p><strong>{{ t('companyInformations.cityLabel') }} :</strong> {{ company.city }}</p>
     <p><strong>{{ t('companyInformations.countryLabel') }} :</strong> {{ company.country }}</p>
     <p v-if="company.pc"><strong>{{ t('companyInformations.pcLabel') }} :</strong> {{ company.pc }}</p>
