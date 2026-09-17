@@ -53,7 +53,11 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
   position: fixed;
   top: 12px;
   right: 12px;
-  z-index: 1000;
+  /* En dessous de la sidebar (z-index:800, voir ListeDeroulante.vue) : sur
+     mobile celle-ci occupe presque toute la largeur de l'écran quand elle
+     est ouverte et son bouton "+" est en haut à droite, au même endroit
+     que ce badge. */
+  z-index: 750;
 }
 
 .info-button {

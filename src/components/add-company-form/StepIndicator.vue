@@ -68,8 +68,18 @@ defineProps({
 }
 
 @media (max-width: 768px) {
+  .step-indicator li {
+    gap: 2px;
+  }
+  .step-number {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
   .step-label {
-    display: none;
+    font-size: 0.6em;
+    line-height: 1.1;
+    overflow-wrap: break-word;
   }
 }
 </style>
