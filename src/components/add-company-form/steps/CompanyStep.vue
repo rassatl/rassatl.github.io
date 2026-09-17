@@ -240,15 +240,15 @@ defineExpose({ validateFields });
   <template v-else>
     <div class="form-group">
       <label for="address">{{ t('addCompanyForm.companyAddress') }}</label>
-      <input id="address" v-model="address" maxlength="200" :class="{ invalid: addressInvalid }" />
+      <input id="address" v-model="address" maxlength="200" :placeholder="t('addCompanyForm.companyAddressPlaceholder')" :class="{ invalid: addressInvalid }" />
     </div>
     <div class="form-group">
       <label for="city">{{ t('addCompanyForm.companyCity') }}</label>
-      <input id="city" v-model="city" maxlength="100" :class="{ invalid: cityInvalid }" />
+      <input id="city" v-model="city" maxlength="100" :placeholder="t('addCompanyForm.companyCityPlaceholder')" :class="{ invalid: cityInvalid }" />
     </div>
     <div class="form-group">
       <label for="pc">{{ t('addCompanyForm.companyPC') }} ({{ t('addCompanyForm.optional') }})</label>
-      <input id="pc" v-model="pc" maxlength="20" :class="{ invalid: pcInvalid }" />
+      <input id="pc" v-model="pc" maxlength="20" :placeholder="t('addCompanyForm.companyPCPlaceholder')" :class="{ invalid: pcInvalid }" />
     </div>
   </template>
 </template>
