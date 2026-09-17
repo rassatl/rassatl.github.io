@@ -5,10 +5,18 @@ vi.mock('@emailjs/browser', () => ({
   default: { send: (...args) => sendMock(...args) },
 }))
 
+// La notification en échec journalise l'erreur via useErrorLogs (Firestore) :
+// mocké ici pour ne pas dépendre d'un vrai backend dans ce test unitaire.
+const logErrorMock = vi.fn()
+vi.mock('./useErrorLogs.js', () => ({
+  useErrorLogs: () => ({ logError: (...args) => logErrorMock(...args) }),
+}))
+
 describe('useEmailNotifications', () => {
   beforeEach(() => {
     sendMock.mockReset()
     sendMock.mockResolvedValue(undefined)
+    logErrorMock.mockReset()
     vi.resetModules()
     vi.stubEnv('VITE_EMAILJS_SERVICE_ID', 'service-id')
     vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', 'template-id')
@@ -51,6 +59,7 @@ describe('useEmailNotifications', () => {
       'Acme',
       'company-1'
     )).resolves.toBeUndefined()
+    expect(logErrorMock).toHaveBeenCalledTimes(1)
   })
 
   it('skips sending when EmailJS is not configured', async () => {

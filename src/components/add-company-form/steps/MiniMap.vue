@@ -5,8 +5,10 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-control-geocoder';
 import { iconForSpeciality } from '../../../utils/mapIcons';
 import MapLayerSwitcher from '../../map/MapLayerSwitcher.vue';
+import { useErrorLogs } from '../../../composables/useErrorLogs.js';
 
 const t = inject('t')
+const { logError } = useErrorLogs()
 const props = defineProps({
   speciality: { type: String, default: '' },
   address: { type: String, default: '' },
@@ -188,6 +190,7 @@ watch(() => [props.address, props.city, props.pc, props.country], ([newAddress, 
       }
     } catch (error) {
       console.error("Erreur lors de l'appel à Nominatim:", error);
+      logError(error, 'miniMap:nominatim');
     } finally {
       isLoading.value = false;
     }

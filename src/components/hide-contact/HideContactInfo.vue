@@ -2,8 +2,10 @@
 import { ref, onMounted, inject } from 'vue'
 import { db } from '../../services/firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { useErrorLogs } from '../../composables/useErrorLogs.js'
 
 const t = inject('t')
+const { logError } = useErrorLogs()
 const props = defineProps({
   companyId: String,
   contactId: String,
@@ -32,6 +34,7 @@ onMounted(async () => {
     status.value = 'ready'
   } catch (e) {
     console.error('Erreur lors de la vérification du lien :', e)
+    logError(e, 'hideContactInfo:load')
     status.value = 'error'
   }
 })
@@ -52,6 +55,7 @@ const confirmHide = async () => {
     status.value = 'done'
   } catch (e) {
     console.error('Erreur lors du masquage des informations :', e)
+    logError(e, 'hideContactInfo:confirmHide')
     status.value = 'error'
   } finally {
     isSubmitting.value = false

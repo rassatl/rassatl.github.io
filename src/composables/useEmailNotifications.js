@@ -1,4 +1,5 @@
 import emailjs from '@emailjs/browser'
+import { useErrorLogs } from './useErrorLogs.js'
 
 const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID
 const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID
@@ -13,6 +14,8 @@ const buildHideUrl = (companyId, contactId, hideToken) => {
 }
 
 export function useEmailNotifications() {
+  const { logError } = useErrorLogs()
+
   const notifyContact = async (contact, companyName, companyId) => {
     if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
       console.warn("EmailJS n'est pas configuré (VITE_EMAILJS_*) : email de notification non envoyé.")
@@ -28,6 +31,7 @@ export function useEmailNotifications() {
       }, { publicKey: PUBLIC_KEY })
     } catch (e) {
       console.error(`Erreur lors de l'envoi de l'email à ${contact.email} :`, e)
+      logError(e, 'emailNotifications:notifyContact')
     }
   }
 
