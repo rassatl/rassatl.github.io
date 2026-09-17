@@ -42,7 +42,7 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
     <p><strong>Spécialité :</strong> {{ company.speciality }}</p>
     <p><strong>Ville :</strong> {{ company.city }}</p>
     <p><strong>Pays :</strong> {{ company.country }}</p>
-    <p><strong>Code Postal :</strong> {{ company.pc }}</p>
+    <p v-if="company.pc"><strong>Code Postal :</strong> {{ company.pc }}</p>
     <p v-if="company.website">
       <strong>Site :</strong>
       <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
