@@ -13,8 +13,8 @@ const mountStep = (props = {}) =>
     global: { provide: { t: (key) => key } },
   })
 
-// Fills the "fields" address mode (rather than the default "full address"
-// single input) since it exercises name/address/city/country individually.
+// Fills the "fields" address mode (the default) since it exercises
+// name/address/city/country individually.
 const fillRequiredFields = async (wrapper, overrides = {}) => {
   const fields = {
     speciality: 'IA & Big Data',
@@ -27,8 +27,6 @@ const fillRequiredFields = async (wrapper, overrides = {}) => {
   await wrapper.find('#speciality').setValue(fields.speciality)
   await wrapper.find('#name').setValue(fields.name)
   await wrapper.find('#country').setValue(fields.country)
-  // Switch to the detailed-fields address mode (default is "full address").
-  await wrapper.findAll('[role="tab"]')[1].trigger('click')
   await wrapper.find('#address').setValue(fields.address)
   await wrapper.find('#city').setValue(fields.city)
   if (fields.pc !== undefined) await wrapper.find('#pc').setValue(fields.pc)
@@ -101,7 +99,8 @@ describe('CompanyStep validateFields', () => {
     const wrapper = mountStep({ x: 48.8566, y: 2.3522 })
     await wrapper.find('#speciality').setValue('IA & Big Data')
     await wrapper.find('#name').setValue('Acme')
-    // Stays in the default "full address" mode for this input.
+    // Switch to the full-address mode (default is now the detailed fields).
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
     await wrapper.find('#fullAddress').setValue('12 rue de Paris, 75001 Paris, France')
     const { data, error } = wrapper.vm.validateFields()
     expect(error).toBeNull()

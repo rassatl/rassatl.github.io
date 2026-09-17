@@ -30,12 +30,11 @@ const normalizeText = (value, maxLength) => value.trim().replace(/\s+/g, ' ').sl
 
 const stripAccents = (value) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-// Saisie de l'adresse en deux modes au choix : un champ unique "adresse
-// complète" (plus rapide à coller depuis Google Maps par ex.) ou les champs
-// détaillés séparés. Les deux alimentent les mêmes address/city/pc/country.
-// En mode révision (proposition déjà pré-remplie), on démarre sur les champs
-// détaillés pour ne pas masquer les données déjà présentes.
-const addressMode = ref(address.value ? 'fields' : 'full');
+// Saisie de l'adresse en deux modes au choix : les champs détaillés séparés
+// (mode par défaut) ou un champ unique "adresse complète" (plus rapide à
+// coller depuis Google Maps par ex.). Les deux alimentent les mêmes
+// address/city/pc/country.
+const addressMode = ref('fields');
 const fullAddress = ref('');
 
 // La ville et le code postal peuvent être dans le même segment, dans les
@@ -219,17 +218,17 @@ defineExpose({ validateFields });
     <button
       type="button"
       role="tab"
-      :aria-selected="addressMode === 'full'"
-      :class="{ active: addressMode === 'full' }"
-      @click="switchAddressMode('full')"
-    >{{ t('addCompanyForm.addressModeFull') }}</button>
-    <button
-      type="button"
-      role="tab"
       :aria-selected="addressMode === 'fields'"
       :class="{ active: addressMode === 'fields' }"
       @click="switchAddressMode('fields')"
     >{{ t('addCompanyForm.addressModeFields') }}</button>
+    <button
+      type="button"
+      role="tab"
+      :aria-selected="addressMode === 'full'"
+      :class="{ active: addressMode === 'full' }"
+      @click="switchAddressMode('full')"
+    >{{ t('addCompanyForm.addressModeFull') }}</button>
   </div>
 
   <div v-if="addressMode === 'full'" class="form-group">

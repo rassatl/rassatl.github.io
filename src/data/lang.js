@@ -75,6 +75,7 @@ export const languages = {
     },
     companyInformations: {
       specialityLabel: "Spécialité",
+      addressLabel: "Adresse",
       cityLabel: "Ville",
       countryLabel: "Pays",
       pcLabel: "Code Postal",
@@ -225,6 +226,7 @@ export const languages = {
     },
     companyInformations: {
       specialityLabel: "Speciality",
+      addressLabel: "Address",
       cityLabel: "City",
       countryLabel: "Country",
       pcLabel: "Postal Code",
