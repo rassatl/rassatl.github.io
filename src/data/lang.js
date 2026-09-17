@@ -74,6 +74,11 @@ export const languages = {
       clickForDetails: "Cliquez pour plus d'informations"
     },
     companyInformations: {
+      specialityLabel: "Spécialité",
+      cityLabel: "Ville",
+      countryLabel: "Pays",
+      pcLabel: "Code Postal",
+      websiteLabel: "Site",
       missionTitle: "Mission",
       reviewTitle: "Avis",
       contactsTitle: "Contact",
@@ -219,6 +224,11 @@ export const languages = {
       clickForDetails: "Click for more details"
     },
     companyInformations: {
+      specialityLabel: "Speciality",
+      cityLabel: "City",
+      countryLabel: "Country",
+      pcLabel: "Postal Code",
+      websiteLabel: "Website",
       missionTitle: "Mission",
       reviewTitle: "Review",
       contactsTitle: "Contact",
