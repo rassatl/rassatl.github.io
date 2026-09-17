@@ -123,5 +123,36 @@ service cloud.firestore {
         allow delete: if request.auth != null;
       }
     }
+
+    function isValidTicketData(data) {
+      return data.keys().hasOnly(['title', 'description', 'status', 'createdAt', 'pageUrl', 'userAgent'])
+        && data.title is string
+        && data.title.size() <= 150
+        && data.description is string
+        && data.description.size() > 0
+        && data.description.size() <= 2000
+        && data.status in ['open', 'in_progress', 'closed']
+        && data.createdAt is timestamp
+        && data.pageUrl is string
+        && data.pageUrl.size() <= 500
+        && data.userAgent is string
+        && data.userAgent.size() <= 300;
+    }
+
+    // Signalements de problème envoyés depuis le bouton d'info, par
+    // n'importe qui (y compris des visiteurs non connectés). Seul un
+    // administrateur connecté peut les consulter ; la création impose un
+    // statut initial "open" et la modification ne peut faire évoluer que ce
+    // statut (titre/description/date figés une fois le ticket créé).
+    match /tickets/{ticketId} {
+      allow read: if request.auth != null;
+      allow create: if isValidTicketData(request.resource.data) && request.resource.data.status == 'open';
+      allow update: if request.auth != null
+        && isValidTicketData(request.resource.data)
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.description == resource.data.description
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if request.auth != null;
+    }
   }
 }
