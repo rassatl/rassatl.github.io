@@ -67,6 +67,11 @@ const changeEmail = async () => {
       />
     </div>
     <p v-if="error" class="student-error">{{ error }}</p>
+    <!-- Le mail part de l'adresse générique de Firebase : les messageries
+         d'école le classent presque toujours en indésirable, voire en
+         quarantaine. On prévient avant l'envoi comme après, pour que l'étudiant
+         sache où le chercher au lieu de croire qu'il n'est jamais parti. -->
+    <p class="spam-warning" role="note">⚠ {{ t('addCompanyForm.studentSpamWarning') }}</p>
     <p v-if="status === 'sent'" class="link-sent">
       {{ t('addCompanyForm.studentLinkSentTo') }} <strong>{{ email.trim() }}</strong>.
       {{ t('addCompanyForm.studentLinkSentHint') }}
@@ -110,6 +115,16 @@ input:focus {
 .student-error {
   color: var(--red-esigelec);
   font-size: 0.85em;
+  margin: 0 0 10px 0;
+}
+
+.spam-warning {
+  font-size: 0.85em;
+  color: var(--gray-dark);
+  background: var(--gray-white-light);
+  border-left: 4px solid var(--red-esigelec);
+  border-radius: 4px;
+  padding: 8px 10px;
   margin: 0 0 10px 0;
 }
 

@@ -64,6 +64,24 @@ describe('StudentStep', () => {
     expect(wrapper.find('.visibility-checkbox').exists()).toBe(true)
   })
 
+  it('warns the mail may land in spam or quarantine, before and after sending', async () => {
+    const wrapper = mountStep()
+    expect(wrapper.find('.spam-warning').text()).toContain('addCompanyForm.studentSpamWarning')
+
+    await wrapper.find('#student-email').setValue('ada@groupe-esigelec.org')
+    await wrapper.find('.send-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('addCompanyForm.studentLinkSentTo')
+    expect(wrapper.find('.spam-warning').exists()).toBe(true)
+  })
+
+  it('no longer warns once the address is verified', () => {
+    studentEmail.value.value = 'ada@groupe-esigelec.org'
+    const wrapper = mountStep()
+    expect(wrapper.find('.spam-warning').exists()).toBe(false)
+  })
+
   it('rejects an address outside the student domain without sending anything', async () => {
     const wrapper = mountStep()
     await wrapper.find('#student-email').setValue('ada@gmail.com')

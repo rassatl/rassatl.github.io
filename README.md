@@ -87,6 +87,8 @@ Deux types de comptes Firebase Auth coexistent, et **être connecté ne suffit p
 2. **Authentication → Paramètres → Domaines autorisés** : vérifier que le domaine du site (ex. `rassatl.github.io`) est bien listé.
 3. **Firestore → collection `admins`** : pour chaque administrateur, créer un document dont l'**ID est l'UID** du compte (visible dans Authentication → Utilisateurs), avec un champ quelconque (ex. `role: "admin"`). Sans ce document, un compte perd ses droits d'admin.
 
+**Le mail de vérification arrive en indésirables ou en quarantaine.** Firebase l'envoie depuis `noreply@<projet>.firebaseapp.com`, une adresse générique que les messageries d'école filtrent presque toujours. L'interface prévient l'étudiant, avant comme après l'envoi, de regarder ces dossiers. Pour améliorer la situation à la source : personnaliser le modèle de mail (Authentication → Templates → « Lien de connexion par e-mail ») et surtout envoyer depuis un domaine à soi (« Personnaliser le domaine », qui demande des enregistrements DNS). Faire passer le code par un autre service (EmailJS) donnerait une meilleure délivrabilité, mais Firestore ne pourrait alors plus vérifier côté serveur qu'un email est vérifié : c'est pour cela que ce n'est pas le choix retenu.
+
 Le domaine étudiant est défini à deux endroits à garder synchronisés : `src/utils/studentEmail.js` et `isStudent()` dans `firestore.rules`.
 
 ## 🖥️ Usage

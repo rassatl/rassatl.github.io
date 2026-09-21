@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './fixtures/login.js'
 import { latestSignInLink } from './fixtures/emulator.js'
+import { requestStudentLink } from './fixtures/student.js'
 
 test.describe("vérification de l'email étudiant dans le formulaire d'ajout", () => {
   test.beforeEach(async ({ page }) => {
@@ -15,6 +16,17 @@ test.describe("vérification de l'email étudiant dans le formulaire d'ajout", (
     await expect(page.getByLabel("Afficher mon email étudiant sur la fiche de l'entreprise")).not.toBeChecked()
     // L'étape entreprise n'est pas accessible tant que l'email n'est pas vérifié.
     await expect(page.locator('#speciality')).toBeHidden()
+  })
+
+  test("prévient que le mail arrivera dans les indésirables ou en quarantaine, avant comme après l'envoi", async ({ page }) => {
+    const warning = page.getByText('arrivera très probablement dans vos courriers indésirables')
+    await expect(warning).toBeVisible()
+    await expect(warning).toContainText('noreply@find-my-company-30652.firebaseapp.com')
+    await expect(warning).toContainText('quarantaine')
+
+    // Toujours visible une fois le lien envoyé, quand l'étudiant le cherche.
+    await requestStudentLink(page)
+    await expect(warning).toBeVisible()
   })
 
   test("impossible de passer à la suite sans avoir vérifié son email", async ({ page }) => {
