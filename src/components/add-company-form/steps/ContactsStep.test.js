@@ -52,10 +52,31 @@ describe('ContactsStep validate', () => {
     const wrapper = mountStep()
     await fillContact(wrapper, 0, { firstName: 'Ada', lastName: 'Lovelace', role: 'CTO', email: 'ada@example.com' })
     await wrapper.find('.add-contact-button').trigger('click')
+    await wrapper.find('#contact-firstName-1').setValue('Alan')
     expect(wrapper.vm.validate()).toBeNull()
 
     await fillContact(wrapper, 1, { firstName: 'Alan', lastName: 'Turing', role: 'CEO', email: 'alan@example.com' })
     expect(wrapper.vm.validate()).toHaveLength(2)
+  })
+
+  it('accepts an entirely empty form, since the contact is optional', () => {
+    const wrapper = mountStep()
+    expect(wrapper.vm.validate()).toEqual([])
+  })
+
+  it('ignores empty blocks but keeps the filled ones', async () => {
+    const wrapper = mountStep()
+    await wrapper.find('.add-contact-button').trigger('click')
+    await fillContact(wrapper, 1, { firstName: 'Alan', lastName: 'Turing', role: 'CEO', email: 'alan@example.com' })
+    expect(wrapper.vm.validate()).toEqual([
+      { firstName: 'Alan', lastName: 'Turing', role: 'CEO', email: 'alan@example.com', phone: '' },
+    ])
+  })
+
+  it('rejects a block with only a phone number', async () => {
+    const wrapper = mountStep()
+    await wrapper.find('#contact-phone-0').setValue('0612345678')
+    expect(wrapper.vm.validate()).toBeNull()
   })
 
   it('does not allow removing the last remaining contact', async () => {

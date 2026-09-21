@@ -5,15 +5,15 @@ import { adminDb } from './fixtures/emulator.js'
 const RUN_ID = crypto.randomUUID().slice(0, 8)
 const COMPANY_NAME = `E2E Wizard Co ${RUN_ID}`
 
-test("un visiteur peut soumettre une proposition d'entreprise via l'assistant", async ({ page }) => {
+// Ouvre le formulaire, remplit l'étape 1 (entreprise) et passe à l'étape 2.
+async function fillCompanyStep(page, name) {
   await mockNominatim(page, { country: 'France' })
   await page.goto('/')
 
   await page.getByRole('button', { name: 'Ajouter' }).click()
 
-  // Étape 1 : entreprise
   await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
-  await page.locator('#name').fill(COMPANY_NAME)
+  await page.locator('#name').fill(name)
   await page.locator('#country').selectOption({ label: 'France' })
   await page.getByRole('tab', { name: 'Champs détaillés' }).click()
   await page.locator('#address').fill('10 rue de la République')
@@ -25,6 +25,10 @@ test("un visiteur peut soumettre une proposition d'entreprise via l'assistant", 
   // renvoyé par la vérification finale (également mocké).
   await page.locator('.mini-map-wrapper .mini-map').click()
   await page.getByRole('button', { name: 'Suivant' }).click()
+}
+
+test("un visiteur peut soumettre une proposition d'entreprise via l'assistant", async ({ page }) => {
+  await fillCompanyStep(page, COMPANY_NAME)
 
   // Étape 2 : contact
   await page.locator('#contact-firstName-0').fill('Camille')
@@ -52,4 +56,26 @@ test("un visiteur peut soumettre une proposition d'entreprise via l'assistant", 
   const contacts = await snapshot.docs[0].ref.collection('contacts').get()
   expect(contacts.size).toBe(1)
   expect(contacts.docs[0].data().email).toBe('camille.durand@example.com')
+})
+
+test("le contact est facultatif : une proposition peut être soumise sans", async ({ page }) => {
+  const name = `${COMPANY_NAME} sans contact`
+  await fillCompanyStep(page, name)
+
+  // Étape 2 : contact laissé vide
+  await page.getByRole('button', { name: 'Suivant' }).click()
+
+  // Étape 3 : mission
+  await page.locator('#mission').fill("Développement d'un module de reporting interne.")
+  await page.getByRole('button', { name: 'Suivant' }).click()
+
+  // Étape 4 : avis (facultatif, laissé vide) puis soumission finale
+  await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+
+  await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+  const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', name).get()
+  expect(snapshot.size).toBe(1)
+  const contacts = await snapshot.docs[0].ref.collection('contacts').get()
+  expect(contacts.size).toBe(0)
 })
