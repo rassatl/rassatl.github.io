@@ -57,3 +57,9 @@ export async function listDocuments(idToken, path) {
   const response = await fetch(documentsUrl(path), { headers: headers(idToken) })
   return response.status
 }
+
+// Lit un document précis (par son chemin complet) avec les droits de ce jeton.
+export async function getDocument(idToken, path) {
+  const response = await fetch(documentsUrl(path), { headers: headers(idToken) })
+  return response.status
+}

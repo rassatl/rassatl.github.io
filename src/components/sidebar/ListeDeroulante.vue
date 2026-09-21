@@ -4,6 +4,7 @@ import { db } from '../../services/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import Modal from '../common/Modal.vue';
 import AddCompanyForm from '../add-company-form/AddCompanyForm.vue';
+import CompanyInformations from '../company/CompanyInformations.vue';
 import ListCompanies from './ListCompanies.vue';
 import LangSwitcher from '../common/LangSwitcher.vue'
 import LoginForm from '../auth/LoginForm.vue'
@@ -34,6 +35,9 @@ const isPendingModalOpen = ref(false);
 const isTicketsModalOpen = ref(false);
 const companies = ref([])
 const selectedSpeciality = ref('')
+// Fiche rouverte au retour du lien de vérification, quand l'étudiant l'avait
+// demandé depuis les contacts d'une entreprise.
+const returnedCompany = ref(null)
 
 // Fonction pour ouvrir la fenêtre modale d'ajout d'entreprise
 const openModal = () => {
@@ -128,20 +132,27 @@ onMounted(() => {
 onMounted(fetchCompanies);
 
 // Retour depuis le lien de vérification reçu par email : connecte l'étudiant
-// puis rouvre le formulaire d'ajout pour qu'il poursuive là où il s'était
-// arrêté (y compris quand le lien est invalide, pour pouvoir en redemander un).
+// puis le ramène là où il s'était arrêté, la fiche d'entreprise dont il voulait
+// voir les contacts ou, sinon, le formulaire d'ajout (y compris quand le lien
+// est invalide, pour pouvoir en redemander un).
 onMounted(async () => {
-  try {
-    const cameFromLink = await completeStudentSignIn(
-      () => window.prompt(t('addCompanyForm.studentConfirmEmailPrompt'))
-    );
-    if (cameFromLink) openModal();
-  } catch (e) {
-    console.error('Erreur lors de la vérification du lien étudiant :', e);
-    logError(e, 'auth:studentSignInLink');
+  const link = await completeStudentSignIn(
+    () => window.prompt(t('addCompanyForm.studentConfirmEmailPrompt'))
+  );
+  if (!link) return;
+
+  if (link.error) {
+    console.error('Erreur lors de la vérification du lien étudiant :', link.error);
+    logError(link.error, 'auth:studentSignInLink');
     alert(t('addCompanyForm.studentLinkInvalid'));
-    openModal();
   }
+
+  if (link.returnTo?.companyId) {
+    await fetchCompanies();
+    returnedCompany.value = companies.value.find((c) => c.id === link.returnTo.companyId) ?? null;
+    if (returnedCompany.value) return;
+  }
+  openModal();
 });
 </script>
 
@@ -210,6 +221,11 @@ onMounted(async () => {
     <!-- Fenêtre d'ajout d'entreprise -->
     <Modal :isOpen="isModalOpen" @close="closeModal">
       <AddCompanyForm @refresh="handleCompanyAdded" @close="closeModal" />
+    </Modal>
+
+    <!-- Fiche d'entreprise rouverte après la vérification de l'email étudiant -->
+    <Modal :isOpen="!!returnedCompany" @close="returnedCompany = null" style="--modal-width: 60%; --modal-height: 80%">
+      <CompanyInformations :company="returnedCompany" />
     </Modal>
 
     <!-- Fenêtre de connexion / déconnexion -->
