@@ -1,11 +1,11 @@
 import { ref, watchEffect } from 'vue'
 import { db } from '../services/firebase'
-import { collection, onSnapshot, addDoc, doc, deleteDoc, getDocs } from 'firebase/firestore'
+import { collection, onSnapshot, addDoc, doc, deleteDoc, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from './useAuth.js'
 import { useEmailNotifications } from './useEmailNotifications.js'
 
 const pendingCompanies = ref([])
-const { isAdmin } = useAuth()
+const { isAdmin, studentEmail } = useAuth()
 const { notifyContacts } = useEmailNotifications()
 let unsubscribe = null
 
@@ -56,11 +56,40 @@ const publishContacts = async (contacts, companyId) => {
   return published
 }
 
+// Publie une entreprise validée. Quand elle vient d'une proposition
+// d'étudiant, l'auteur est consigné dans la collection privée companyAuthors
+// (réservée aux admins) dans la même écriture atomique : la trace survit ainsi
+// à la suppression de la proposition. L'email n'est recopié sur l'entreprise
+// publique (addedBy) que si l'étudiant a choisi de s'afficher.
+const publishCompany = async (data, author) => {
+  const companyRef = doc(collection(db, 'companies'))
+  const batch = writeBatch(db)
+  batch.set(companyRef, author?.email && author.visible ? { ...data, addedBy: author.email } : data)
+  if (author?.email) {
+    batch.set(doc(db, 'companyAuthors', companyRef.id), {
+      submittedBy: author.email,
+      visible: !!author.visible,
+      companyName: data.name,
+      approvedAt: serverTimestamp(),
+    })
+  }
+  await batch.commit()
+  return companyRef
+}
+
 export function usePendingCompanies() {
-  // Soumission publique : l'entreprise et ses contacts partent en attente de
-  // validation (pas encore de jeton de masquage, pas encore d'email envoyé).
-  const submitPending = async (data, contacts) => {
-    const pendingRef = await addDoc(collection(db, 'pendingCompanies'), data)
+  // Soumission par un étudiant vérifié : l'entreprise et ses contacts partent
+  // en attente de validation (pas encore de jeton de masquage, pas encore
+  // d'email envoyé). L'email étudiant n'est conservé que sur la proposition,
+  // visible des seuls admins, avec le choix de l'étudiant de s'afficher (ou
+  // non) sur l'entreprise publiée (voir approve).
+  const submitPending = async (data, contacts, { visible = false } = {}) => {
+    if (!studentEmail.value) throw new Error('Student email not verified')
+    const pendingRef = await addDoc(collection(db, 'pendingCompanies'), {
+      ...data,
+      submittedBy: studentEmail.value,
+      submitterVisible: !!visible
+    })
     await Promise.all(contacts.map(contact =>
       addDoc(collection(db, 'pendingCompanies', pendingRef.id, 'contacts'), contact)
     ))
@@ -69,9 +98,10 @@ export function usePendingCompanies() {
 
   // Validation admin : publie la proposition (potentiellement modifiée) et
   // ses contacts, prévient chaque contact par email, puis retire l'entrée en
-  // attente (document et sous-collection de contacts).
-  const approve = async (pendingId, data, contacts) => {
-    const companyRef = await addDoc(collection(db, 'companies'), data)
+  // attente (document et sous-collection de contacts). `author` est l'auteur
+  // de la proposition : { email, visible }.
+  const approve = async (pendingId, data, contacts, author) => {
+    const companyRef = await publishCompany(data, author)
     const publishedContacts = await publishContacts(contacts, companyRef.id)
 
     const oldContacts = await fetchContacts('pendingCompanies', pendingId)

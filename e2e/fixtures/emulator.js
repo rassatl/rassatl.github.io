@@ -60,12 +60,31 @@ export async function clearFirestore() {
 }
 
 // Crée l'utilisateur admin de test s'il n'existe pas déjà (idempotent, pour
-// pouvoir relancer le global-setup sans échouer sur "email already exists").
+// pouvoir relancer le global-setup sans échouer sur "email already exists"),
+// et son document admins/{uid} : c'est lui, et non le simple fait d'être
+// connecté, qui donne les droits d'admin (voir firestore.rules). En prod, ce
+// document est créé à la main depuis la console Firebase.
 export async function ensureAdminUser() {
   const auth = adminAuth()
-  return withRetry(async () => {
+  const admin = await withRetry(async () => {
     const existing = await auth.getUserByEmail(ADMIN_EMAIL).catch(() => null)
     if (existing) return existing
     return auth.createUser({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
   })
+  await adminDb().collection('admins').doc(admin.uid).set({ role: 'admin' })
+  return admin
+}
+
+// Dernier lien de connexion envoyé à cette adresse, lu directement dans
+// l'émulateur Auth (aucun email n'est réellement envoyé) : c'est ce que
+// l'étudiant recevrait dans sa boîte mail.
+export async function latestSignInLink(email) {
+  const url = `http://${AUTH_HOST}/emulator/v1/projects/${PROJECT_ID}/oobCodes`
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Impossible de lire les liens de l'émulateur Auth : ${response.status} ${await response.text()}`)
+  }
+  const { oobCodes } = await response.json()
+  const link = oobCodes.filter((code) => code.email === email && code.requestType === 'EMAIL_SIGNIN').at(-1)
+  return link?.oobLink
 }

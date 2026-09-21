@@ -1,9 +1,10 @@
 <script setup>
 import { ref, watch, inject } from 'vue'
 import { db } from '../../services/firebase'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import StarRating from '../common/StarRating.vue'
 import { useErrorLogs } from '../../composables/useErrorLogs.js'
+import { useAuth } from '../../composables/useAuth.js'
 
 const t = inject('t')
 const props = defineProps({
@@ -14,7 +15,11 @@ const props = defineProps({
 })
 
 const { logError } = useErrorLogs()
+const { isAdmin } = useAuth()
 const contacts = ref([])
+// Email de l'étudiant qui a ajouté l'entreprise, lu dans la collection privée
+// companyAuthors : seuls les admins y ont accès, les autres n'y touchent pas.
+const privateAuthor = ref('')
 const isLoadingContacts = ref(true)
 
 const fetchContacts = async (companyId) => {
@@ -36,7 +41,20 @@ const fetchContacts = async (companyId) => {
   }
 }
 
+const fetchPrivateAuthor = async (companyId, admin) => {
+  privateAuthor.value = ''
+  if (!companyId || !admin) return
+  try {
+    const authorDoc = await getDoc(doc(db, 'companyAuthors', companyId))
+    if (authorDoc.exists() && props.company?.id === companyId) privateAuthor.value = authorDoc.data().submittedBy
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'auteur de l'entreprise :", error)
+    logError(error, 'companyInformations:fetchPrivateAuthor')
+  }
+}
+
 watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immediate: true })
+watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAuthor(companyId, admin), { immediate: true })
 </script>
 
 <template>
@@ -50,6 +68,13 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
     <p v-if="company.website">
       <strong>{{ t('companyInformations.websiteLabel') }} : </strong>
       <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
+    </p>
+
+    <p v-if="company.addedBy" class="added-by">
+      <strong>{{ t('companyInformations.addedByLabel') }} :</strong> {{ company.addedBy }}
+    </p>
+    <p v-else-if="privateAuthor" class="added-by">
+      <strong>{{ t('companyInformations.addedByPrivateLabel') }} :</strong> {{ privateAuthor }}
     </p>
 
     <section v-if="company.mission" class="info-section">
@@ -94,6 +119,11 @@ watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immedi
 h2 {
   color: var(--red-esigelec);
   margin-bottom: 0.5rem;
+}
+
+.added-by {
+  font-size: 0.85em;
+  color: var(--gray-dark);
 }
 
 .info-section {

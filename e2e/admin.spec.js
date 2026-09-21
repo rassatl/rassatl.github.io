@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './fixtures/login.js'
 import { mockNominatim } from './fixtures/nominatim.js'
-import { seedPendingCompany } from './fixtures/seed.js'
+import { seedPendingCompany, seedCompany, seedCompanyAuthor } from './fixtures/seed.js'
 import { adminDb, ADMIN_EMAIL } from './fixtures/emulator.js'
 
 const RUN_ID = crypto.randomUUID().slice(0, 8)
@@ -72,6 +72,8 @@ test.describe('modération des propositions en attente', () => {
       x: 44.8378,
       y: -0.5792,
       mission: 'Mission à valider.',
+      submittedBy: 'etudiant.propose@groupe-esigelec.org',
+      submitterVisible: false,
     }, [
       { firstName: 'Julien', lastName: 'Petit', role: 'Manager', email: 'julien.petit@example.com', phone: '' },
     ])
@@ -82,7 +84,11 @@ test.describe('modération des propositions en attente', () => {
 
     await page.getByRole('button', { name: 'Liste des entreprises en attente' }).click()
     const item = page.locator('.pending-companies li', { hasText: name })
+    // L'admin voit qui a proposé l'entreprise.
+    await expect(item).toContainText('etudiant.propose@groupe-esigelec.org')
     await item.getByRole('button', { name: 'Modifier / Valider' }).click()
+    await expect(page.locator('.submitted-by')).toContainText('etudiant.propose@groupe-esigelec.org')
+    await expect(page.locator('.submitted-by')).toContainText('Son email restera privé')
 
     // Le formulaire de révision précharge les contacts de la proposition via
     // un appel Firestore asynchrone (voir ContactsStep.vue) : on attend que
@@ -104,9 +110,101 @@ test.describe('modération des propositions en attente', () => {
 
     const companySnapshot = await adminDb().collection('companies').where('name', '==', name).get()
     expect(companySnapshot.size).toBe(1)
+    // L'entreprise publiée est lisible par tout le monde : l'email de
+    // l'étudiant qui l'a proposée n'y figure pas quand il a choisi de rester
+    // privé...
+    expect(companySnapshot.docs[0].data()).not.toHaveProperty('submittedBy')
+    expect(companySnapshot.docs[0].data()).not.toHaveProperty('addedBy')
+    // ... mais l'auteur est conservé à part, dans la collection privée, même
+    // si la proposition en attente a été supprimée.
+    const author = await adminDb().collection('companyAuthors').doc(companySnapshot.docs[0].id).get()
+    expect(author.data()).toMatchObject({
+      submittedBy: 'etudiant.propose@groupe-esigelec.org',
+      visible: false,
+      companyName: name,
+    })
 
     const contactsSnapshot = await companySnapshot.docs[0].ref.collection('contacts').get()
     expect(contactsSnapshot.size).toBe(1)
     expect(contactsSnapshot.docs[0].data().email).toBe('julien.petit@example.com')
   })
+
+  test("si l'étudiant a choisi d'être visible, son email apparaît sur l'entreprise publiée", async ({ page }) => {
+    const name = `E2E Visible Author Co ${RUN_ID}`
+    await seedPendingCompany({
+      speciality: 'IA & Big Data',
+      name,
+      address: '9 rue de la Visibilité',
+      city: 'Lille',
+      country: 'France',
+      pc: '59000',
+      x: 50.6292,
+      y: 3.0573,
+      mission: 'Mission à valider, auteur visible.',
+      submittedBy: 'etudiant.visible@groupe-esigelec.org',
+      submitterVisible: true,
+    })
+
+    await mockNominatim(page, { country: 'France' })
+    await page.goto('/')
+    await loginAsAdmin(page)
+
+    await page.getByRole('button', { name: 'Liste des entreprises en attente' }).click()
+    await page.locator('.pending-companies li', { hasText: name })
+      .getByRole('button', { name: 'Modifier / Valider' }).click()
+    await expect(page.locator('.submitted-by')).toContainText("Il a choisi d'afficher son email")
+
+    await page.getByRole('button', { name: 'Valider' }).click()
+    await expect(page.locator('.pending-companies li', { hasText: name })).toHaveCount(0)
+
+    await expect.poll(async () => {
+      const snapshot = await adminDb().collection('companies').where('name', '==', name).get()
+      return snapshot.size
+    }).toBe(1)
+
+    const companySnapshot = await adminDb().collection('companies').where('name', '==', name).get()
+    expect(companySnapshot.docs[0].data().addedBy).toBe('etudiant.visible@groupe-esigelec.org')
+    expect(companySnapshot.docs[0].data()).not.toHaveProperty('submittedBy')
+
+    const author = await adminDb().collection('companyAuthors').doc(companySnapshot.docs[0].id).get()
+    expect(author.data()).toMatchObject({ submittedBy: 'etudiant.visible@groupe-esigelec.org', visible: true })
+  })
+
+})
+
+test("un admin voit l'auteur privé d'une entreprise, un visiteur non", async ({ page, browser }) => {
+  const name = `E2E Private Author Co ${RUN_ID}`
+  const authorEmail = 'etudiant.prive@groupe-esigelec.org'
+  const companyId = await seedCompany({
+    speciality: 'IA & Big Data',
+    name,
+    address: '3 rue du Secret',
+    city: 'Tours',
+    country: 'France',
+    pc: '37000',
+    x: 47.3941,
+    y: 0.6848,
+    mission: "Mission dont l'auteur reste privé.",
+  })
+  await seedCompanyAuthor(companyId, {
+    submittedBy: authorEmail,
+    visible: false,
+    companyName: name,
+    approvedAt: new Date(),
+  })
+
+  // Visiteur anonyme : la fiche n'affiche aucun auteur.
+  const visitor = await browser.newPage()
+  await visitor.goto('/')
+  await visitor.locator('.company-item', { hasText: name }).click()
+  await expect(visitor.locator('.modal-content').getByRole('heading', { name })).toBeVisible()
+  await expect(visitor.locator('.modal-content')).not.toContainText(authorEmail)
+  await visitor.close()
+
+  // Admin : la fiche affiche l'auteur, en précisant qu'il est privé.
+  await page.goto('/')
+  await loginAsAdmin(page)
+  await page.locator('.company-item', { hasText: name }).click()
+  await expect(page.locator('.modal-content')).toContainText(authorEmail)
+  await expect(page.locator('.modal-content')).toContainText('privé')
 })

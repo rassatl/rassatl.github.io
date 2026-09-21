@@ -24,3 +24,10 @@ export async function seedPendingCompany(data, contacts = []) {
   )
   return pendingRef.id
 }
+
+// Écrit la trace privée de l'auteur d'une entreprise publiée (collection
+// companyAuthors, lisible des seuls admins), comme le fait la validation d'une
+// proposition.
+export async function seedCompanyAuthor(companyId, data) {
+  await adminDb().collection('companyAuthors').doc(companyId).set(data)
+}

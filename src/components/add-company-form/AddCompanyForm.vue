@@ -5,6 +5,7 @@ import { useAuth } from '../../composables/useAuth.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import StepIndicator from './StepIndicator.vue'
+import StudentStep from './steps/StudentStep.vue'
 import CompanyStep from './steps/CompanyStep.vue'
 import MiniMap from './steps/MiniMap.vue'
 import ContactsStep from './steps/ContactsStep.vue'
@@ -12,7 +13,7 @@ import MissionStep from './steps/MissionStep.vue'
 import ReviewStep from './steps/ReviewStep.vue'
 
 const t = inject('t')
-const { isAdmin } = useAuth();
+const { isAdmin, studentEmail } = useAuth();
 const { submitPending, approve, addCompanyDirectly, reject: rejectPending } = usePendingCompanies();
 const { logError } = useErrorLogs();
 
@@ -27,6 +28,11 @@ const emit = defineEmits(['refresh', 'close']);
 // d'un coup d'œil pour décider de valider ou refuser : on affiche donc
 // toutes les sections en même temps plutôt que de les cacher étape par étape.
 const isReviewMode = computed(() => !!props.pendingCompany);
+
+// Un admin (ajout direct ou révision) est de confiance ; tous les autres
+// doivent d'abord prouver qu'ils sont étudiants, sinon la proposition est de
+// toute façon refusée par les règles Firestore.
+const needsVerification = computed(() => !isAdmin.value && !isReviewMode.value);
 
 // État de l'étape 1, partagé entre CompanyStep (champs) et MiniMap (carte)
 // via v-model : les deux doivent rester synchronisés (ex. un géocodage
@@ -46,7 +52,6 @@ const countryList = ref([]);
 const isLoading = ref(false);
 const submissionDone = ref(false);
 const currentStep = ref(1);
-const totalSteps = 4;
 const stepError = ref('');
 // Incrémenté à chaque tentative de passage à l'étape suivante (ou de
 // soumission) sans point placé sur la carte : attire l'œil vers la carte,
@@ -58,12 +63,26 @@ watch([x, y], ([newX, newY]) => {
   if (newX !== '' && newY !== '') pinMissingAttempt.value = 0;
 });
 
-const stepLabels = computed(() => [
-  t('addCompanyForm.step1Label'),
-  t('addCompanyForm.step2Label'),
-  t('addCompanyForm.step3Label'),
-  t('addCompanyForm.step4Label'),
+// Étapes affichées, dans l'ordre. Chaque étape est repérée par sa clé et non
+// par son numéro, car la vérification étudiante n'existe que pour certains
+// utilisateurs et décalerait sinon toutes les autres.
+const stepKeys = computed(() => [
+  ...(needsVerification.value ? ['student'] : []),
+  'company', 'contacts', 'mission', 'review',
 ]);
+const totalSteps = computed(() => stepKeys.value.length);
+const currentKey = computed(() => stepKeys.value[currentStep.value - 1]);
+const showStep = (key) => isReviewMode.value || currentKey.value === key;
+
+const stepLabelKeys = {
+  student: 'addCompanyForm.stepStudentLabel',
+  company: 'addCompanyForm.step1Label',
+  contacts: 'addCompanyForm.step2Label',
+  mission: 'addCompanyForm.step3Label',
+  review: 'addCompanyForm.step4Label',
+};
+const stepLabel = (key) => t(stepLabelKeys[key]);
+const stepLabels = computed(() => stepKeys.value.map(stepLabel));
 
 // Traduit le code d'erreur renvoyé par CompanyStep.validateFields().
 const companyStepErrorKeys = {
@@ -71,6 +90,10 @@ const companyStepErrorKeys = {
   website: 'addCompanyForm.stepErrorWebsite',
 };
 
+// Choix de l'étudiant : afficher (ou non) son email sur la fiche de
+// l'entreprise publiée. Privé par défaut ; partagé avec StudentStep (v-model).
+const submitterVisible = ref(false);
+const studentStepRef = ref(null);
 const companyStepRef = ref(null);
 const miniMapRef = ref(null);
 const contactsStepRef = ref(null);
@@ -85,8 +108,8 @@ onMounted(() => {
 // La mini-carte est cachée (v-show) sur les étapes 2 à 4 : Leaflet calcule
 // mal ses tuiles pendant qu'un conteneur est en display:none, il faut donc
 // recalculer sa taille à chaque retour sur l'étape 1.
-watch(currentStep, (step) => {
-  if (step === 1) miniMapRef.value?.invalidateSize();
+watch(currentKey, (key) => {
+  if (key === 'company') miniMapRef.value?.invalidateSize();
 });
 
 // Gère la soumission du formulaire : en mode révision tout est déjà visible,
@@ -103,7 +126,11 @@ const handleSubmit = () => {
 // formulaire depuis la dernière étape.
 const goNext = () => {
   stepError.value = '';
-  if (currentStep.value === 1) {
+  if (currentKey.value === 'student' && !studentStepRef.value.validate()) {
+    stepError.value = t('addCompanyForm.stepErrorStudent');
+    return;
+  }
+  if (currentKey.value === 'company') {
     const { error } = companyStepRef.value.validateFields();
     if (error) {
       stepError.value = t(companyStepErrorKeys[error]);
@@ -111,16 +138,16 @@ const goNext = () => {
       return;
     }
   }
-  if (currentStep.value === 2 && !contactsStepRef.value.validate()) {
+  if (currentKey.value === 'contacts' && !contactsStepRef.value.validate()) {
     stepError.value = t('addCompanyForm.stepErrorContacts');
     return;
   }
-  if (currentStep.value === 3 && !missionStepRef.value.validate()) {
+  if (currentKey.value === 'mission' && !missionStepRef.value.validate()) {
     stepError.value = t('addCompanyForm.stepErrorMission');
     return;
   }
 
-  if (currentStep.value < totalSteps) {
+  if (currentStep.value < totalSteps.value) {
     currentStep.value += 1;
   } else {
     submitForm();
@@ -139,6 +166,14 @@ const goPrev = () => {
 // envoie la proposition en attente de validation pour un visiteur non connecté.
 const submitForm = async () => {
   if (isLoading.value) return;
+
+  // Filet de sécurité : la session étudiante a pu être fermée (déconnexion,
+  // autre onglet) depuis l'étape de vérification.
+  if (needsVerification.value && !studentEmail.value) {
+    currentStep.value = 1;
+    stepError.value = t('addCompanyForm.stepErrorStudent');
+    return;
+  }
 
   const { data: company, error } = companyStepRef.value.validateFields();
   const validContacts = contactsStepRef.value.validate();
@@ -174,7 +209,10 @@ const submitForm = async () => {
     }
 
     if (props.pendingCompany) {
-      await approve(props.pendingCompany.id, company, validContacts);
+      await approve(props.pendingCompany.id, company, validContacts, {
+        email: props.pendingCompany.submittedBy,
+        visible: props.pendingCompany.submitterVisible,
+      });
       emit('refresh');
       emit('close');
     } else if (isAdmin.value) {
@@ -182,7 +220,7 @@ const submitForm = async () => {
       emit('refresh');
       emit('close');
     } else {
-      await submitPending(company, validContacts);
+      await submitPending(company, validContacts, { visible: submitterVisible.value });
       submissionDone.value = true;
     }
   } catch (e) {
@@ -221,9 +259,20 @@ const handleReject = async () => {
 
       <StepIndicator v-if="!isReviewMode" :steps="stepLabels" :current-step="currentStep" />
 
-      <!-- Étape 1 : entreprise -->
-      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[0] }}</h3>
-      <div v-show="isReviewMode || currentStep === 1">
+      <!-- Auteur de la proposition, visible des seuls admins en révision -->
+      <p v-if="pendingCompany?.submittedBy" class="submitted-by">
+        {{ t('pendingCompanies.submittedBy') }} <strong>{{ pendingCompany.submittedBy }}</strong><br />
+        {{ pendingCompany.submitterVisible ? t('pendingCompanies.submitterVisible') : t('pendingCompanies.submitterPrivate') }}
+      </p>
+
+      <!-- Étape de vérification : email étudiant (jamais affiché sur le site) -->
+      <div v-if="needsVerification" v-show="showStep('student')">
+        <StudentStep ref="studentStepRef" v-model:visible="submitterVisible" />
+      </div>
+
+      <!-- Étape entreprise -->
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabel('company') }}</h3>
+      <div v-show="showStep('company')">
         <CompanyStep
           ref="companyStepRef"
           v-model:speciality="speciality"
@@ -239,21 +288,21 @@ const handleReject = async () => {
         />
       </div>
 
-      <!-- Étape 2 : contact(s) -->
-      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[1] }}</h3>
-      <div v-show="isReviewMode || currentStep === 2">
+      <!-- Étape contact(s) -->
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabel('contacts') }}</h3>
+      <div v-show="showStep('contacts')">
         <ContactsStep ref="contactsStepRef" :pending-company="pendingCompany" />
       </div>
 
-      <!-- Étape 3 : mission -->
-      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[2] }}</h3>
-      <div v-show="isReviewMode || currentStep === 3">
+      <!-- Étape mission -->
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabel('mission') }}</h3>
+      <div v-show="showStep('mission')">
         <MissionStep ref="missionStepRef" :pending-company="pendingCompany" />
       </div>
 
-      <!-- Étape 4 : avis -->
-      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabels[3] }}</h3>
-      <div v-show="isReviewMode || currentStep === 4">
+      <!-- Étape avis -->
+      <h3 v-if="isReviewMode" class="review-section-title">{{ stepLabel('review') }}</h3>
+      <div v-show="showStep('review')">
         <ReviewStep ref="reviewStepRef" :pending-company="pendingCompany" />
       </div>
 
@@ -276,7 +325,7 @@ const handleReject = async () => {
 
     <MiniMap
       ref="miniMapRef"
-      v-show="isReviewMode || currentStep === 1"
+      v-show="showStep('company')"
       v-model:x="x"
       v-model:y="y"
       :speciality="speciality"
@@ -336,6 +385,12 @@ h2 {
   border-top: none;
   padding-top: 0;
   margin-top: 0;
+}
+
+.submitted-by {
+  font-size: 0.85em;
+  color: var(--gray-dark);
+  margin: 0 0 12px 0;
 }
 
 .step-error {

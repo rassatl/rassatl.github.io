@@ -45,6 +45,9 @@ const quickReject = async (company) => {
             :country="company.country"
             :pc="String(company.pc)"
           />
+          <p v-if="company.submittedBy" class="submitted-by">
+            {{ t('pendingCompanies.submittedBy') }} <strong>{{ company.submittedBy }}</strong>
+          </p>
           <div class="pending-actions">
             <button type="button" class="review-button" @click="openReview(company)">{{ t('pendingCompanies.review') }}</button>
             <button type="button" class="reject-button" @click="quickReject(company)">{{ t('pendingCompanies.reject') }}</button>
@@ -79,6 +82,12 @@ ul {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.submitted-by {
+  font-size: 0.85em;
+  color: var(--gray-dark);
+  margin: 6px 0 0 0;
 }
 
 .pending-actions {
