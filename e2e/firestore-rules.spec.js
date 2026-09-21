@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { ADMIN_EMAIL, ADMIN_PASSWORD } from './fixtures/emulator.js'
-import { idTokenFor, createDocument, listDocuments } from './fixtures/firestore-rest.js'
+import { idTokenFor, createDocument, listDocuments, getDocument } from './fixtures/firestore-rest.js'
 
 // Ces tests attaquent Firestore directement, sans passer par le formulaire :
 // c'est ce que ferait quelqu'un qui contourne l'interface. Ils prouvent que
@@ -150,5 +150,49 @@ test.describe('un étudiant vérifié n\'a aucun droit d\'administrateur', () =>
     const visibleAuthor = company({ name: `E2E Admin Visible Co ${RUN_ID}`, addedBy: STUDENT_EMAIL })
     expect((await createDocument(idToken, 'companies', visibleAuthor)).status).toBe(200)
     expect(await listDocuments(idToken, 'companyAuthors')).toBe(200)
+  })
+})
+
+test.describe("contacts d'une entreprise : réservés aux étudiants vérifiés", () => {
+  let contactsPath
+  let contactPath
+
+  test.beforeAll(async () => {
+    // Seul un admin peut publier une entreprise et ses contacts.
+    const { idToken } = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    const { id: companyId } = await createDocument(idToken, 'companies', company({ name: `E2E Contacts Co ${RUN_ID}` }))
+    contactsPath = `companies/${companyId}/contacts`
+    const { id: contactId } = await createDocument(idToken, contactsPath, {
+      ...contact,
+      hidden: false,
+      hideToken: 'e2e-hide-token-0123456789',
+    })
+    contactPath = `${contactsPath}/${contactId}`
+  })
+
+  test('un visiteur anonyme ne peut pas lister les contacts', async () => {
+    expect(await listDocuments(null, contactsPath)).toBe(403)
+  })
+
+  test('un compte au domaine étudiant mais non vérifié, ou vérifié hors domaine, ne les voit pas', async () => {
+    const unverified = await idTokenFor(`contacts.non.verifie.${RUN_ID}@groupe-esigelec.org`, { emailVerified: false })
+    expect(await listDocuments(unverified.idToken, contactsPath)).toBe(403)
+
+    const outsider = await idTokenFor(`contacts.externe.${RUN_ID}@gmail.com`, { emailVerified: true })
+    expect(await listDocuments(outsider.idToken, contactsPath)).toBe(403)
+  })
+
+  test('un étudiant vérifié et un admin peuvent les lister', async () => {
+    const student = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
+    expect(await listDocuments(student.idToken, contactsPath)).toBe(200)
+
+    const admin = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    expect(await listDocuments(admin.idToken, contactsPath)).toBe(200)
+  })
+
+  test("la lecture d'un contact précis reste ouverte, pour le lien « masquer mes informations »", async () => {
+    // Le lien envoyé au contact contient son identifiant : il doit pouvoir
+    // s'en servir sans être connecté, alors que la liste, elle, est fermée.
+    expect(await getDocument(null, contactPath)).toBe(200)
   })
 })

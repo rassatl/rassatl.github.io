@@ -17,6 +17,12 @@ import { isStudentEmail } from '../utils/studentEmail.js'
 // completeStudentSignIn).
 const PENDING_EMAIL_KEY = 'studentEmailForSignIn'
 
+// Où ramener l'étudiant une fois son email vérifié : la fiche d'une
+// entreprise (dont il voulait voir les contacts) ou, à défaut, le formulaire
+// d'ajout. Gardé au même endroit que l'adresse, avec les mêmes limites : perdu
+// si le lien est ouvert sur un autre appareil.
+const RETURN_TO_KEY = 'studentSignInReturnTo'
+
 const state = reactive({
   user: null,
   isAdmin: false
@@ -49,13 +55,18 @@ const studentEmail = computed(() => {
   return user.email
 })
 
+// Les contacts d'une entreprise ne sont montrés qu'aux étudiants vérifiés et
+// aux admins (firestore.rules l'impose aussi : ce n'est pas qu'un affichage).
+const canViewContacts = computed(() => state.isAdmin || !!studentEmail.value)
+
 export function useAuth() {
   const login = (email, password) => signInWithEmailAndPassword(auth, email, password)
   const logout = () => signOut(auth)
 
   // Envoie à l'email étudiant un lien qui, ouvert, prouve que la personne
-  // possède bien cette boîte mail.
-  const sendStudentLink = async (email) => {
+  // possède bien cette boîte mail. `returnTo` ({ companyId }) indique la fiche
+  // à rouvrir au retour ; sans lui, c'est le formulaire d'ajout.
+  const sendStudentLink = async (email, returnTo = null) => {
     const address = email.trim()
     if (!isStudentEmail(address)) throw new Error('Not a student email address')
     await sendSignInLinkToEmail(auth, address, {
@@ -63,23 +74,36 @@ export function useAuth() {
       handleCodeInApp: true
     })
     localStorage.setItem(PENDING_EMAIL_KEY, address)
+    if (returnTo) localStorage.setItem(RETURN_TO_KEY, JSON.stringify(returnTo))
+    else localStorage.removeItem(RETURN_TO_KEY)
   }
 
   // À appeler au chargement de la page : si l'URL est un lien de vérification
-  // reçu par email, connecte l'étudiant et nettoie l'URL. Renvoie true si
-  // l'URL en était un (succès ou non), pour que l'appelant puisse rouvrir le
-  // formulaire ; lève l'erreur Firebase si le lien est invalide ou expiré.
+  // reçu par email, connecte l'étudiant et nettoie l'URL. Renvoie null si
+  // l'URL n'en est pas un ; sinon { returnTo, error } : `returnTo` est la fiche
+  // à rouvrir (ou null pour le formulaire d'ajout), `error` l'erreur Firebase
+  // si le lien est invalide ou expiré (null en cas de succès).
   // `askEmail` sert quand le lien est ouvert sur un autre appareil que celui
   // qui l'a demandé : l'adresse n'est alors pas en mémoire.
   const completeStudentSignIn = async (askEmail) => {
-    if (!isSignInWithEmailLink(auth, window.location.href)) return false
+    if (!isSignInWithEmailLink(auth, window.location.href)) return null
+    let returnTo = null
+    try {
+      returnTo = JSON.parse(localStorage.getItem(RETURN_TO_KEY) ?? 'null')
+    } catch {
+      returnTo = null
+    }
     try {
       const address = localStorage.getItem(PENDING_EMAIL_KEY) || askEmail?.()
-      if (!address) return true
-      await signInWithEmailLink(auth, address.trim(), window.location.href)
-      localStorage.removeItem(PENDING_EMAIL_KEY)
-      return true
+      if (address) {
+        await signInWithEmailLink(auth, address.trim(), window.location.href)
+        localStorage.removeItem(PENDING_EMAIL_KEY)
+      }
+      return { returnTo, error: null }
+    } catch (error) {
+      return { returnTo, error }
     } finally {
+      localStorage.removeItem(RETURN_TO_KEY)
       // Le lien est à usage unique : le laisser dans l'URL n'aurait aucun sens
       // (et un rechargement retenterait une connexion vouée à l'échec).
       window.history.replaceState({}, document.title, window.location.pathname)
@@ -90,6 +114,7 @@ export function useAuth() {
     user: computed(() => state.user),
     isAdmin: computed(() => state.isAdmin),
     studentEmail,
+    canViewContacts,
     login,
     logout,
     sendStudentLink,

@@ -208,3 +208,36 @@ test("un admin voit l'auteur privé d'une entreprise, un visiteur non", async ({
   await expect(page.locator('.modal-content')).toContainText(authorEmail)
   await expect(page.locator('.modal-content')).toContainText('privé')
 })
+
+test("un admin voit les contacts sans avoir à vérifier d'email étudiant", async ({ page }) => {
+  const name = `E2E Admin Contacts Co ${RUN_ID}`
+  await seedCompany({
+    speciality: 'IA & Big Data',
+    name,
+    address: '4 rue des Contacts',
+    city: 'Angers',
+    country: 'France',
+    pc: '49000',
+    x: 47.4784,
+    y: -0.5632,
+    mission: 'Mission avec un contact.',
+  }, [
+    {
+      firstName: 'Nadia',
+      lastName: 'Roux',
+      role: 'Responsable stages',
+      email: 'nadia.roux@example.com',
+      phone: '',
+      hidden: false,
+      hideToken: 'e2e-hide-token-nadia-0123456789',
+    },
+  ])
+
+  await page.goto('/')
+  await loginAsAdmin(page)
+  await page.locator('.company-item', { hasText: name }).click()
+
+  const modal = page.locator('.modal-content')
+  await expect(modal.getByText('Nadia Roux', { exact: false })).toBeVisible()
+  await expect(modal.getByText('Les contacts sont réservés aux étudiants')).toHaveCount(0)
+})

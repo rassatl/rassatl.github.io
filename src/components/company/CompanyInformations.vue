@@ -3,6 +3,7 @@ import { ref, watch, inject } from 'vue'
 import { db } from '../../services/firebase'
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import StarRating from '../common/StarRating.vue'
+import StudentEmailVerifier from '../student/StudentEmailVerifier.vue'
 import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import { useAuth } from '../../composables/useAuth.js'
 
@@ -15,15 +16,18 @@ const props = defineProps({
 })
 
 const { logError } = useErrorLogs()
-const { isAdmin } = useAuth()
+const { isAdmin, canViewContacts } = useAuth()
 const contacts = ref([])
 // Email de l'étudiant qui a ajouté l'entreprise, lu dans la collection privée
 // companyAuthors : seuls les admins y ont accès, les autres n'y touchent pas.
 const privateAuthor = ref('')
 const isLoadingContacts = ref(true)
 
-const fetchContacts = async (companyId) => {
-  if (!companyId) {
+// Les contacts ne sont lus que par un étudiant vérifié ou un admin : pour les
+// autres, firestore.rules refuserait la requête (et chaque visiteur
+// journaliserait une erreur pour rien), on ne la tente donc pas.
+const fetchContacts = async (companyId, allowed) => {
+  if (!companyId || !allowed) {
     contacts.value = []
     isLoadingContacts.value = false
     return
@@ -53,7 +57,11 @@ const fetchPrivateAuthor = async (companyId, admin) => {
   }
 }
 
-watch(() => props.company?.id, (companyId) => fetchContacts(companyId), { immediate: true })
+watch(
+  [() => props.company?.id, canViewContacts],
+  ([companyId, allowed]) => fetchContacts(companyId, allowed),
+  { immediate: true }
+)
 watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAuthor(companyId, admin), { immediate: true })
 </script>
 
@@ -90,7 +98,11 @@ watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAu
 
     <section class="info-section">
       <h3>{{ t('companyInformations.contactsTitle') }}</h3>
-      <p v-if="isLoadingContacts" class="loading">{{ t('companyInformations.loadingContacts') }}</p>
+      <div v-if="!canViewContacts" class="contacts-locked">
+        <p>{{ t('companyInformations.contactsLocked') }}</p>
+        <StudentEmailVerifier input-id="contacts-student-email" :return-to="{ companyId: company.id }" />
+      </div>
+      <p v-else-if="isLoadingContacts" class="loading">{{ t('companyInformations.loadingContacts') }}</p>
       <p v-else-if="contacts.length === 0" class="empty">{{ t('companyInformations.noContacts') }}</p>
       <ul v-else class="contacts-list">
         <li v-for="contact in contacts" :key="contact.id" class="contact-card">
@@ -123,6 +135,12 @@ h2 {
 
 .added-by {
   font-size: 0.85em;
+  color: var(--gray-dark);
+}
+
+.contacts-locked p {
+  margin-bottom: 10px;
+  font-size: 0.9em;
   color: var(--gray-dark);
 }
 

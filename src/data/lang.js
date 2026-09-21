@@ -76,7 +76,7 @@ export const languages = {
       contactRole: "Rôle / Poste",
       contactEmail: "Email",
       contactPhone: "Téléphone",
-      contactsPrivacyNote: "Chaque contact recevra un email l'informant que ses coordonnées sont visibles sur le site, avec la possibilité de les masquer.",
+      contactsPrivacyNote: "Les contacts ne sont visibles que des étudiants vérifiés. Chaque contact recevra un email l'informant que ses coordonnées sont visibles, avec la possibilité de les masquer.",
       missionLabel: "Mission effectuée",
       missionHint: "Décrivez rapidement ce que vous avez fait pendant votre stage.",
       reviewHint: "Facultatif : partagez votre avis sur cette entreprise pour aider les futurs étudiants.",
@@ -103,6 +103,7 @@ export const languages = {
       addedByLabel: "Ajoutée par",
       addedByPrivateLabel: "Ajoutée par (privé, visible des seuls administrateurs)",
       contactsTitle: "Contact",
+      contactsLocked: "Les contacts sont réservés aux étudiants : vérifiez votre email étudiant pour les consulter.",
       loadingContacts: "Chargement des contacts...",
       noContacts: "Aucun contact renseigné.",
       contactHidden: "Cette personne a choisi de masquer ses informations personnelles."
@@ -110,7 +111,7 @@ export const languages = {
     hideContact: {
       title: "Masquer mes informations",
       loading: "Vérification du lien...",
-      intro: "Vos coordonnées sont actuellement visibles sur Find My Company en tant que contact pour",
+      intro: "Vos coordonnées sont actuellement visibles, par les étudiants vérifiés de Find My Company, en tant que contact pour",
       warning: "En confirmant, votre nom, prénom, rôle, email et téléphone seront définitivement retirés du site.",
       confirmButton: "Masquer mes informations",
       alreadyHidden: "Vos informations ont déjà été masquées.",
@@ -250,7 +251,7 @@ export const languages = {
       contactRole: "Role / Position",
       contactEmail: "Email",
       contactPhone: "Phone",
-      contactsPrivacyNote: "Each contact will receive an email letting them know their details are visible on the site, with the option to hide them.",
+      contactsPrivacyNote: "Contacts are only visible to verified students. Each contact will receive an email letting them know their details are visible, with the option to hide them.",
       missionLabel: "Mission carried out",
       missionHint: "Briefly describe what you did during your internship.",
       reviewHint: "Optional: share your opinion on this company to help future students.",
@@ -277,6 +278,7 @@ export const languages = {
       addedByLabel: "Added by",
       addedByPrivateLabel: "Added by (private, visible to administrators only)",
       contactsTitle: "Contact",
+      contactsLocked: "Contacts are reserved for students: verify your student email to see them.",
       loadingContacts: "Loading contacts...",
       noContacts: "No contact provided.",
       contactHidden: "This person chose to hide their personal information."
@@ -284,7 +286,7 @@ export const languages = {
     hideContact: {
       title: "Hide my information",
       loading: "Checking the link...",
-      intro: "Your details are currently visible on Find My Company as a contact for",
+      intro: "Your details are currently visible to verified students on Find My Company as a contact for",
       warning: "By confirming, your name, role, email and phone number will be permanently removed from the site.",
       confirmButton: "Hide my information",
       alreadyHidden: "Your information has already been hidden.",

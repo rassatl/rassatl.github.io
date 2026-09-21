@@ -79,7 +79,8 @@ describe('StudentStep', () => {
     await wrapper.find('.send-button').trigger('click')
     await flushPromises()
 
-    expect(sendStudentLink).toHaveBeenCalledWith('ada@groupe-esigelec.org')
+    // Depuis le formulaire d'ajout, aucune fiche à rouvrir au retour du lien.
+    expect(sendStudentLink).toHaveBeenCalledWith('ada@groupe-esigelec.org', null)
     expect(wrapper.text()).toContain('addCompanyForm.studentLinkSentTo')
     expect(wrapper.text()).toContain('ada@groupe-esigelec.org')
     // Still not verified: only the link in the email can do that.

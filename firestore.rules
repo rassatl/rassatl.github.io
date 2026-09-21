@@ -168,9 +168,16 @@ service cloud.firestore {
       allow update, delete: if false;
 
       // Personnes à contacter pour cette entreprise (CV / lettre de
-      // motivation). Lecture publique : c'est tout l'intérêt de la donnée.
+      // motivation). Seuls les étudiants vérifiés (et les admins) peuvent les
+      // lister : un visiteur ne peut donc pas récupérer les coordonnées.
+      // La lecture d'un contact précis, par son identifiant, reste ouverte :
+      // le lien « masquer mes informations » envoyé à la personne concernée
+      // doit fonctionner sans connexion. Cet identifiant, aléatoire, n'est
+      // connu que de la personne (dans son lien) et de ceux qui ont accès à
+      // la liste.
       match /contacts/{contactId} {
-        allow read: if true;
+        allow get: if true;
+        allow list: if isStudent() || isAdmin();
         allow create: if isAdmin() && isValidPublishedContactData(request.resource.data) && request.resource.data.hidden == false;
         allow delete: if false;
         allow update: if (isAdmin() && isValidPublishedContactData(request.resource.data))
