@@ -61,19 +61,38 @@ To get started with this project locally, follow these steps:
    - Create a Firebase project at [Firebase Console](https://console.firebase.google.com/).
    - Obtain your Firebase config and place it in the appropriate file (e.g., `.env` or `firebaseConfig.js`).
 
-5. **Run the development server**:
+5. **Configurer l'authentification** (voir la section [Authentification et droits](#-authentification-et-droits) ci-dessous).
+
+6. **Run the development server**:
 
     ```bash
     npm run serve
     ```
 
-6. Open your browser and go to `http://localhost:8080` to see the application in action.
+7. Open your browser and go to `http://localhost:8080` to see the application in action.
+
+## 🔐 Authentification et droits
+
+Deux types de comptes Firebase Auth coexistent, et **être connecté ne suffit pas à être admin** :
+
+- **Les étudiants** ajoutent des entreprises. La première étape du formulaire leur demande leur email étudiant (`@groupe-esigelec.org`) et leur envoie un lien de connexion ; cliquer dessus prouve qu'ils possèdent la boîte mail. Cette vérification est imposée par `firestore.rules` (`isStudent()`), pas seulement par l'interface.
+  - **Qui a ajouté quoi** : l'email vérifié est conservé sur la proposition (`submittedBy`), puis, à la validation, dans la collection **privée** `companyAuthors` (un document par entreprise, lisible et écrivable des seuls admins), qui survit à la suppression de la proposition. Une proposition refusée n'est pas conservée.
+  - **Visibilité, au choix de l'étudiant** : une case (décochée par défaut) permet d'afficher son email sur la fiche de l'entreprise (`addedBy`, lisible par tous). Sans elle, l'email n'apparaît jamais sur l'entreprise publique ; seuls les admins le voient.
+- **Les administrateurs** valident les propositions, lisent les tickets et journaux d'erreurs, et peuvent ajouter directement une entreprise. Ils se connectent par email + mot de passe.
+
+À faire une fois dans la console Firebase, **avant de déployer les règles Firestore** (le workflow déploie les règles à chaque push sur `main`) :
+
+1. **Authentication → Sign-in method → Email/Password** : cocher **« Lien de connexion par e-mail (connexion sans mot de passe) »**.
+2. **Authentication → Paramètres → Domaines autorisés** : vérifier que le domaine du site (ex. `rassatl.github.io`) est bien listé.
+3. **Firestore → collection `admins`** : pour chaque administrateur, créer un document dont l'**ID est l'UID** du compte (visible dans Authentication → Utilisateurs), avec un champ quelconque (ex. `role: "admin"`). Sans ce document, un compte perd ses droits d'admin.
+
+Le domaine étudiant est défini à deux endroits à garder synchronisés : `src/utils/studentEmail.js` et `isStudent()` dans `firestore.rules`.
 
 ## 🖥️ Usage
 
 1. **Exploring Companies**: Use the interactive map to explore company locations. Zoom and pan to reveal nearby businesses.
 2. **Filtering Companies**: Select from different specialties to filter the companies that match your interest.
-3. **Adding Companies**: Click the "Add Company" button to add a new company to the map. Fill in the relevant details and confirm.
+3. **Adding Companies**: Click the "Add Company" button to add a new company to the map. Verify your student email, fill in the relevant details and confirm.
 4. **Editing**: Modify company information easily via the interface.
 
 ## 🛠️ Contributing

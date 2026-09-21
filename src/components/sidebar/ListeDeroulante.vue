@@ -10,6 +10,7 @@ import LoginForm from '../auth/LoginForm.vue'
 import PendingCompanies from './PendingCompanies.vue'
 import TicketsList from './TicketsList.vue'
 import { useAuth } from '../../composables/useAuth.js'
+import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 import { useTickets } from '../../composables/useTickets.js'
 
@@ -18,7 +19,8 @@ const listeDeroulanteWidth = ref(400)
 const listeDeroulanteDefaultSize = 0
 
 const t = inject('t')
-const { isAdmin } = useAuth()
+const { isAdmin, completeStudentSignIn } = useAuth()
+const { logError } = useErrorLogs()
 const { pendingCompanies } = usePendingCompanies()
 const { openCount: openTicketsCount } = useTickets()
 
@@ -124,6 +126,23 @@ onMounted(() => {
 })
 
 onMounted(fetchCompanies);
+
+// Retour depuis le lien de vérification reçu par email : connecte l'étudiant
+// puis rouvre le formulaire d'ajout pour qu'il poursuive là où il s'était
+// arrêté (y compris quand le lien est invalide, pour pouvoir en redemander un).
+onMounted(async () => {
+  try {
+    const cameFromLink = await completeStudentSignIn(
+      () => window.prompt(t('addCompanyForm.studentConfirmEmailPrompt'))
+    );
+    if (cameFromLink) openModal();
+  } catch (e) {
+    console.error('Erreur lors de la vérification du lien étudiant :', e);
+    logError(e, 'auth:studentSignInLink');
+    alert(t('addCompanyForm.studentLinkInvalid'));
+    openModal();
+  }
+});
 </script>
 
 <template>

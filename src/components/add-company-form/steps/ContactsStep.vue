@@ -12,8 +12,11 @@ const contacts = ref([emptyContact()]);
 const normalizeText = (value, maxLength) => value.trim().replace(/\s+/g, ' ').slice(0, maxLength);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Le contact est facultatif : un bloc entièrement vide est ignoré (le
+// formulaire en affiche toujours un par défaut), seul un bloc entamé doit
+// être complet. Renvoie null si un bloc est invalide, sinon la liste des
+// contacts renseignés (éventuellement vide).
 const validate = () => {
-  if (contacts.value.length === 0) return null;
   const cleaned = [];
   for (const contact of contacts.value) {
     const firstName = normalizeText(contact.firstName, 100);
@@ -21,6 +24,7 @@ const validate = () => {
     const role = normalizeText(contact.role, 150);
     const email = contact.email.trim();
     const phone = normalizeText(contact.phone ?? '', 30);
+    if (!firstName && !lastName && !role && !email && !phone) continue;
     if (!firstName || !lastName || !role || !emailPattern.test(email)) {
       return null;
     }

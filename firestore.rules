@@ -3,11 +3,62 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isValidCompanyData(data) {
-      return data.keys().hasOnly([
+    // Deux types de comptes Firebase Auth coexistent : les administrateurs
+    // (email + mot de passe) et les étudiants, qui se connectent par lien
+    // envoyé à leur email étudiant. Être authentifié ne suffit donc plus à
+    // être admin : il faut avoir un document admins/{uid}, créé à la main
+    // depuis la console Firebase (aucun client ne peut l'écrire).
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Étudiant dont l'email a été vérifié par le lien de connexion (l'email
+    // d'un compte créé sans lien n'est jamais marqué comme vérifié). Le
+    // domaine doit rester synchronisé avec src/utils/studentEmail.js.
+    function isStudent() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('.+@groupe-esigelec[.]org');
+    }
+
+    function companyKeys() {
+      return [
         'speciality', 'name', 'address', 'city', 'country', 'pc', 'x', 'y', 'mission', 'review', 'website'
-      ])
-      && data.speciality in [
+      ];
+    }
+
+    // Une entreprise publiée est lisible par tout le monde : elle n'embarque
+    // l'email de l'étudiant qui l'a proposée (addedBy) que si celui-ci a
+    // choisi de s'afficher. Dans tous les cas, l'auteur est conservé à part,
+    // dans la collection privée companyAuthors.
+    function isValidCompanyData(data) {
+      return data.keys().hasOnly(companyKeys().concat(['addedBy']))
+        && hasValidCompanyFields(data)
+        && (!('addedBy' in data) || (data.addedBy is string && data.addedBy.size() > 0 && data.addedBy.size() <= 200));
+    }
+
+    // Une proposition en attente porte l'email étudiant vérifié de son auteur
+    // (lisible uniquement par un admin, voir plus bas) et son choix de
+    // s'afficher ou non une fois l'entreprise publiée.
+    function isValidPendingCompanyData(data) {
+      return data.keys().hasOnly(companyKeys().concat(['submittedBy', 'submitterVisible']))
+        && hasValidCompanyFields(data)
+        && (!('submittedBy' in data) || (data.submittedBy is string && data.submittedBy.size() <= 200))
+        && (!('submitterVisible' in data) || data.submitterVisible is bool);
+    }
+
+    // Trace privée de l'auteur d'une entreprise publiée.
+    function isValidCompanyAuthorData(data) {
+      return data.keys().hasOnly(['submittedBy', 'visible', 'companyName', 'approvedAt'])
+        && data.submittedBy is string && data.submittedBy.size() > 0 && data.submittedBy.size() <= 200
+        && data.visible is bool
+        && data.companyName is string && data.companyName.size() > 0 && data.companyName.size() <= 120
+        && data.approvedAt is timestamp;
+    }
+
+    function hasValidCompanyFields(data) {
+      return data.speciality in [
         'Développement Logiciel, Tests et Qualité', 'IA & Big Data'
       ]
       && data.name is string
@@ -87,40 +138,68 @@ service cloud.firestore {
         && oldData.hidden == false;
     }
 
+    // Comptes administrateurs : le document admins/{uid} est créé à la main
+    // depuis la console Firebase. Un utilisateur peut seulement vérifier s'il
+    // a le sien (c'est ainsi que l'app sait afficher les actions admin) ;
+    // personne ne peut lister ni écrire, sinon un étudiant pourrait se
+    // promouvoir lui-même.
+    match /admins/{adminUid} {
+      allow get: if request.auth != null && request.auth.uid == adminUid;
+      allow list, write: if false;
+    }
+
+    // Qui a ajouté chaque entreprise publiée (email étudiant vérifié, et s'il
+    // a choisi de s'afficher publiquement), indexé par l'identifiant de
+    // l'entreprise. Collection privée : réservée aux admins, en lecture comme
+    // en écriture, et conservée même quand la proposition en attente est
+    // supprimée à la validation.
+    match /companyAuthors/{companyId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidCompanyAuthorData(request.resource.data);
+      allow update, delete: if false;
+    }
+
     // Entreprises validées, visibles publiquement sur la carte. Elles ne
     // peuvent être créées que par un administrateur connecté : soit
     // directement, soit via la validation d'une proposition en attente.
     match /companies/{companyId} {
       allow read: if true;
-      allow create: if request.auth != null && isValidCompanyData(request.resource.data);
+      allow create: if isAdmin() && isValidCompanyData(request.resource.data);
       allow update, delete: if false;
 
       // Personnes à contacter pour cette entreprise (CV / lettre de
       // motivation). Lecture publique : c'est tout l'intérêt de la donnée.
       match /contacts/{contactId} {
         allow read: if true;
-        allow create: if request.auth != null && isValidPublishedContactData(request.resource.data) && request.resource.data.hidden == false;
+        allow create: if isAdmin() && isValidPublishedContactData(request.resource.data) && request.resource.data.hidden == false;
         allow delete: if false;
-        allow update: if (request.auth != null && isValidPublishedContactData(request.resource.data))
+        allow update: if (isAdmin() && isValidPublishedContactData(request.resource.data))
           || isSelfRedactedContact(request.resource.data, resource.data);
       }
     }
 
-    // Propositions d'ajout soumises par n'importe qui (y compris des
-    // visiteurs non connectés), en attente de validation par un admin.
-    // Seul un administrateur connecté peut les lire, les modifier ou les
+    // Propositions d'ajout soumises par des étudiants dont l'email a été
+    // vérifié, en attente de validation par un admin. La proposition doit
+    // porter l'email vérifié de son auteur (pas d'usurpation possible). Seul
+    // un administrateur connecté peut les lire, les modifier ou les
     // supprimer (refus, ou nettoyage après validation).
     match /pendingCompanies/{pendingId} {
-      allow read: if request.auth != null;
-      allow create: if isValidCompanyData(request.resource.data);
-      allow update: if request.auth != null && isValidCompanyData(request.resource.data);
-      allow delete: if request.auth != null;
+      allow read: if isAdmin();
+      allow create: if isStudent()
+        && isValidPendingCompanyData(request.resource.data)
+        && request.resource.data.submittedBy == request.auth.token.email
+        && request.resource.data.submitterVisible is bool;
+      allow update: if isAdmin() && isValidPendingCompanyData(request.resource.data);
+      allow delete: if isAdmin();
 
+      // Un contact ne peut être ajouté que par l'auteur de la proposition.
       match /contacts/{contactId} {
-        allow read: if request.auth != null;
-        allow create: if isValidPendingContactData(request.resource.data);
-        allow update: if request.auth != null && isValidPendingContactData(request.resource.data);
-        allow delete: if request.auth != null;
+        allow read: if isAdmin();
+        allow create: if isStudent()
+          && isValidPendingContactData(request.resource.data)
+          && get(/databases/$(database)/documents/pendingCompanies/$(pendingId)).data.submittedBy == request.auth.token.email;
+        allow update: if isAdmin() && isValidPendingContactData(request.resource.data);
+        allow delete: if isAdmin();
       }
     }
 
@@ -145,14 +224,14 @@ service cloud.firestore {
     // statut initial "open" et la modification ne peut faire évoluer que ce
     // statut (titre/description/date figés une fois le ticket créé).
     match /tickets/{ticketId} {
-      allow read: if request.auth != null;
+      allow read: if isAdmin();
       allow create: if isValidTicketData(request.resource.data) && request.resource.data.status == 'open';
-      allow update: if request.auth != null
+      allow update: if isAdmin()
         && isValidTicketData(request.resource.data)
         && request.resource.data.title == resource.data.title
         && request.resource.data.description == resource.data.description
         && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if request.auth != null;
+      allow delete: if isAdmin();
     }
 
     function isValidErrorLogData(data) {
@@ -178,10 +257,10 @@ service cloud.firestore {
     // Mêmes règles d'accès que les tickets : écriture publique, lecture et
     // suppression réservées à un administrateur connecté.
     match /errorLogs/{logId} {
-      allow read: if request.auth != null;
+      allow read: if isAdmin();
       allow create: if isValidErrorLogData(request.resource.data);
       allow update: if false;
-      allow delete: if request.auth != null;
+      allow delete: if isAdmin();
     }
   }
 }

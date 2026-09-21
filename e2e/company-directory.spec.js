@@ -32,6 +32,8 @@ test.beforeAll(async () => {
     y: 4.8357,
     mission: 'Mise en place d\'un pipeline de données pour un projet de recommandation.',
     review: { rating: 4, comment: 'Très bonne ambiance et missions formatrices.' },
+    // Étudiant qui a choisi d'afficher son email sur la fiche.
+    addedBy: 'etudiant.visible@groupe-esigelec.org',
   }, [
     {
       firstName: 'Alice',
@@ -60,6 +62,17 @@ test('affiche les entreprises publiées et leurs détails', async ({ page }) => 
   await expect(modal.getByText('Mise en place d\'un pipeline de données', { exact: false })).toBeVisible()
   await expect(modal.getByRole('button', { name: '4 / 5' })).toBeVisible()
   await expect(modal.getByText('Alice Martin', { exact: false })).toBeVisible()
+  await expect(modal.getByText('Ajoutée par', { exact: false })).toBeVisible()
+  await expect(modal.getByText('etudiant.visible@groupe-esigelec.org')).toBeVisible()
+})
+
+test("n'affiche aucun auteur quand l'étudiant a choisi de rester privé", async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.company-item', { hasText: devCompanyName }).click()
+
+  const modal = page.locator('.modal-content')
+  await expect(modal.getByRole('heading', { name: devCompanyName })).toBeVisible()
+  await expect(modal).not.toContainText('Ajoutée par')
 })
 
 test('le filtre de spécialité ne montre que la spécialité choisie', async ({ page }) => {
