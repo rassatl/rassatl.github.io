@@ -31,3 +31,10 @@ export async function seedPendingCompany(data, contacts = []) {
 export async function seedCompanyAuthor(companyId, data) {
   await adminDb().collection('companyAuthors').doc(companyId).set(data)
 }
+
+// Écrit le moyen de contact du formulaire confidentiel (email perso, email
+// étudiant, WhatsApp, LinkedIn) sous une entreprise ou une proposition déjà
+// seedée, comme le fait la soumission du formulaire.
+export async function seedConfidentialContact(parentCollection, parentId, data) {
+  await adminDb().collection(parentCollection).doc(parentId).collection('confidentialContact').add(data)
+}

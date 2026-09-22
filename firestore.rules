@@ -4,18 +4,20 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Deux types de comptes Firebase Auth coexistent : les administrateurs
-    // (email + mot de passe) et les étudiants, qui se connectent par lien
-    // envoyé à leur email étudiant. Être authentifié ne suffit donc plus à
-    // être admin : il faut avoir un document admins/{uid}, créé à la main
-    // depuis la console Firebase (aucun client ne peut l'écrire).
+    // (email + mot de passe) et les étudiants, qui créent eux-mêmes leur
+    // compte (email + mot de passe) puis doivent le vérifier. Être
+    // authentifié ne suffit donc pas à être admin : il faut avoir un
+    // document admins/{uid}, créé à la main depuis la console Firebase
+    // (aucun client ne peut l'écrire).
     function isAdmin() {
       return request.auth != null
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Étudiant dont l'email a été vérifié par le lien de connexion (l'email
-    // d'un compte créé sans lien n'est jamais marqué comme vérifié). Le
-    // domaine doit rester synchronisé avec src/utils/studentEmail.js.
+    // Étudiant dont l'email a été confirmé via le lien de vérification envoyé
+    // à l'inscription (sendEmailVerification) : email_verified ne passe à
+    // true qu'après ce clic. Le domaine doit rester synchronisé avec
+    // src/utils/studentEmail.js.
     function isStudent() {
       return request.auth != null
         && request.auth.token.email_verified == true
@@ -28,24 +30,38 @@ service cloud.firestore {
       ];
     }
 
+    // Une entreprise ajoutée de façon confidentielle : réservée aux visiteurs
+    // non connectés (voir la règle create de pendingCompanies), sans aucune
+    // information identifiante (pas de nom, pas d'adresse précise).
+    function confidentialCompanyKeys() {
+      return ['speciality', 'city', 'country', 'x', 'y', 'review'];
+    }
+
     // Une entreprise publiée est lisible par tout le monde : elle n'embarque
     // l'email de l'étudiant qui l'a proposée (addedBy) que si celui-ci a
     // choisi de s'afficher. Dans tous les cas, l'auteur est conservé à part,
-    // dans la collection privée companyAuthors.
+    // dans la collection privée companyAuthors. Deux formats possibles : le
+    // format complet (admin ou étudiant connecté) ou le format confidentiel
+    // (visiteur non connecté, voir isValidPendingCompanyData).
     function isValidCompanyData(data) {
-      return data.keys().hasOnly(companyKeys().concat(['addedBy']))
-        && hasValidCompanyFields(data)
-        && (!('addedBy' in data) || (data.addedBy is string && data.addedBy.size() > 0 && data.addedBy.size() <= 200));
+      return (
+        (data.keys().hasOnly(companyKeys().concat(['addedBy'])) && hasValidCompanyFields(data))
+        || (data.keys().hasOnly(confidentialCompanyKeys()) && hasValidConfidentialCompanyFields(data))
+      ) && (!('addedBy' in data) || (data.addedBy is string && data.addedBy.size() > 0 && data.addedBy.size() <= 200));
     }
 
     // Une proposition en attente porte l'email étudiant vérifié de son auteur
     // (lisible uniquement par un admin, voir plus bas) et son choix de
-    // s'afficher ou non une fois l'entreprise publiée.
+    // s'afficher ou non une fois l'entreprise publiée — uniquement pour le
+    // format complet (admin ou étudiant connecté) : le format confidentiel
+    // est toujours anonyme, ces deux champs n'y ont pas leur place.
     function isValidPendingCompanyData(data) {
-      return data.keys().hasOnly(companyKeys().concat(['submittedBy', 'submitterVisible']))
-        && hasValidCompanyFields(data)
-        && (!('submittedBy' in data) || (data.submittedBy is string && data.submittedBy.size() <= 200))
-        && (!('submitterVisible' in data) || data.submitterVisible is bool);
+      return (
+        (data.keys().hasOnly(companyKeys().concat(['submittedBy', 'submitterVisible'])) && hasValidCompanyFields(data)
+          && (!('submittedBy' in data) || (data.submittedBy is string && data.submittedBy.size() <= 200))
+          && (!('submitterVisible' in data) || data.submitterVisible is bool))
+        || (data.keys().hasOnly(confidentialCompanyKeys()) && hasValidConfidentialCompanyFields(data))
+      );
     }
 
     // Trace privée de l'auteur d'une entreprise publiée.
@@ -97,9 +113,54 @@ service cloud.firestore {
         && (!('comment' in review) || (review.comment is string && review.comment.size() <= 500));
     }
 
+    function hasValidConfidentialCompanyFields(data) {
+      return data.speciality in [
+        'Développement Logiciel, Tests et Qualité', 'IA & Big Data'
+      ]
+      && data.city is string
+      && data.city.size() > 0
+      && data.city.size() <= 100
+      && data.country is string
+      && data.country.size() > 0
+      && data.country.size() <= 100
+      && data.x is number
+      && data.x >= -90
+      && data.x <= 90
+      && data.y is number
+      && data.y >= -180
+      && data.y <= 180
+      && (!('review' in data) || isValidConfidentialReview(data.review));
+    }
+
+    // Avis personnel, facultatif, sur le ressenti de l'étudiant (mission,
+    // pays, logement...), sans lien avec l'identité de l'entreprise.
+    function isValidConfidentialReview(review) {
+      return review.keys().hasOnly(['rating', 'missionFeeling', 'countryFeeling', 'housingFeeling'])
+        && (!('rating' in review) || (review.rating is int && review.rating >= 1 && review.rating <= 5))
+        && (!('missionFeeling' in review) || (review.missionFeeling is string && review.missionFeeling.size() <= 500))
+        && (!('countryFeeling' in review) || (review.countryFeeling is string && review.countryFeeling.size() <= 500))
+        && (!('housingFeeling' in review) || (review.housingFeeling is string && review.housingFeeling.size() <= 500));
+    }
+
+    // Moyen de contact du formulaire confidentiel : au choix de l'étudiant qui
+    // dépose le point (email perso, email étudiant, WhatsApp, LinkedIn), pour
+    // qu'un autre étudiant intéressé puisse le joindre directement. Rien
+    // n'est vérifié (ni format, ni identité) : tous les champs sont
+    // facultatifs, mais au moins un doit être renseigné, sinon le point ne
+    // serait pas contactable.
+    function isValidConfidentialContactData(data) {
+      return data.keys().hasOnly(['personalEmail', 'schoolEmail', 'whatsapp', 'linkedin'])
+        && data.keys().size() > 0
+        && (!('personalEmail' in data) || (data.personalEmail is string && data.personalEmail.size() > 0 && data.personalEmail.size() <= 200))
+        && (!('schoolEmail' in data) || (data.schoolEmail is string && data.schoolEmail.size() > 0 && data.schoolEmail.size() <= 200))
+        && (!('whatsapp' in data) || (data.whatsapp is string && data.whatsapp.size() > 0 && data.whatsapp.size() <= 50))
+        && (!('linkedin' in data) || (data.linkedin is string && data.linkedin.size() > 0 && data.linkedin.size() <= 300));
+    }
+
     // Contact soumis via une proposition en attente : pas encore publié, pas
     // encore de jeton de masquage (celui-ci n'est créé qu'à la publication,
-    // juste avant l'envoi de l'email).
+    // juste avant l'envoi de l'email). Réservé au format complet : une
+    // proposition confidentielle n'a pas de contacts.
     function isValidPendingContactData(data) {
       return data.keys().hasOnly(['firstName', 'lastName', 'role', 'email', 'phone'])
         && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
@@ -152,7 +213,8 @@ service cloud.firestore {
     // a choisi de s'afficher publiquement), indexé par l'identifiant de
     // l'entreprise. Collection privée : réservée aux admins, en lecture comme
     // en écriture, et conservée même quand la proposition en attente est
-    // supprimée à la validation.
+    // supprimée à la validation. N'existe que pour une entreprise du format
+    // complet : une proposition confidentielle n'a jamais d'auteur.
     match /companyAuthors/{companyId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && isValidCompanyAuthorData(request.resource.data);
@@ -174,7 +236,7 @@ service cloud.firestore {
       // le lien « masquer mes informations » envoyé à la personne concernée
       // doit fonctionner sans connexion. Cet identifiant, aléatoire, n'est
       // connu que de la personne (dans son lien) et de ceux qui ont accès à
-      // la liste.
+      // la liste. N'existe que pour une entreprise du format complet.
       match /contacts/{contactId} {
         allow get: if true;
         allow list: if isStudent() || isAdmin();
@@ -183,29 +245,61 @@ service cloud.firestore {
         allow update: if (isAdmin() && isValidPublishedContactData(request.resource.data))
           || isSelfRedactedContact(request.resource.data, resource.data);
       }
+
+      // Moyen de contact du formulaire confidentiel (un seul document).
+      // Mêmes droits de lecture que les contacts du format complet, mais pas
+      // de lecture publique par identifiant : rien ici ne sert de lien
+      // "masquer mes informations" à quiconque.
+      match /confidentialContact/{contactId} {
+        allow get: if false;
+        allow list: if isStudent() || isAdmin();
+        allow create: if isAdmin() && isValidConfidentialContactData(request.resource.data);
+        allow update, delete: if false;
+      }
     }
 
-    // Propositions d'ajout soumises par des étudiants dont l'email a été
-    // vérifié, en attente de validation par un admin. La proposition doit
-    // porter l'email vérifié de son auteur (pas d'usurpation possible). Seul
-    // un administrateur connecté peut les lire, les modifier ou les
+    // Propositions d'ajout. Deux formats possibles :
+    // - le format complet (nom, adresse, site, mission...), réservé à un
+    //   étudiant vérifié connecté, qui doit porter son propre email
+    //   (submittedBy) et un choix de visibilité explicite ;
+    // - le format confidentiel (spécialité, pays, ville seulement),
+    //   réservé à un visiteur non connecté : toujours anonyme, jamais de
+    //   submittedBy ni de submitterVisible.
+    // Seul un administrateur connecté peut les lire, les modifier ou les
     // supprimer (refus, ou nettoyage après validation).
     match /pendingCompanies/{pendingId} {
       allow read: if isAdmin();
-      allow create: if isStudent()
-        && isValidPendingCompanyData(request.resource.data)
-        && request.resource.data.submittedBy == request.auth.token.email
-        && request.resource.data.submitterVisible is bool;
+      allow create: if isValidPendingCompanyData(request.resource.data)
+        && (
+          (isStudent()
+            && request.resource.data.submittedBy == request.auth.token.email
+            && request.resource.data.submitterVisible is bool)
+          || (request.auth == null
+            && !('submittedBy' in request.resource.data)
+            && !('submitterVisible' in request.resource.data))
+        );
       allow update: if isAdmin() && isValidPendingCompanyData(request.resource.data);
       allow delete: if isAdmin();
 
-      // Un contact ne peut être ajouté que par l'auteur de la proposition.
+      // Un contact ne peut être ajouté que par l'auteur de la proposition
+      // (format complet uniquement).
       match /contacts/{contactId} {
         allow read: if isAdmin();
         allow create: if isStudent()
           && isValidPendingContactData(request.resource.data)
           && get(/databases/$(database)/documents/pendingCompanies/$(pendingId)).data.submittedBy == request.auth.token.email;
         allow update: if isAdmin() && isValidPendingContactData(request.resource.data);
+        allow delete: if isAdmin();
+      }
+
+      // Moyen de contact déposé avec une proposition confidentielle : ouvert
+      // à l'ajout anonyme comme la proposition elle-même, réservé à un
+      // pending du format confidentiel (repéré par l'absence du champ "name").
+      match /confidentialContact/{contactId} {
+        allow read: if isAdmin();
+        allow create: if isValidConfidentialContactData(request.resource.data)
+          && !('name' in get(/databases/$(database)/documents/pendingCompanies/$(pendingId)).data);
+        allow update: if false;
         allow delete: if isAdmin();
       }
     }

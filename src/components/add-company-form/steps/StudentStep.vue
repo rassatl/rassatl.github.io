@@ -1,35 +1,34 @@
 <script setup>
 import { inject } from 'vue'
 import { useAuth } from '../../../composables/useAuth.js'
-import StudentEmailVerifier from '../../student/StudentEmailVerifier.vue'
+import StudentAccessNotice from '../../student/StudentAccessNotice.vue'
 
 const t = inject('t')
 const { studentEmail } = useAuth()
 
 // Choix de l'étudiant : afficher son email sur la fiche de l'entreprise.
-// Privé par défaut, l'email ne sert alors qu'à savoir qui l'a ajoutée.
-const visible = defineModel('visible', { default: false })
-
-// L'étape est valide dès que l'email étudiant est vérifié : la vérification
-// elle-même se fait en dehors du formulaire, dans le lien reçu par email.
-const validate = () => !!studentEmail.value
-
-defineExpose({ validate })
+// Privé par défaut, l'email ne sert alors qu'à savoir qui l'a ajoutée. Sans
+// objet si personne n'est connecté : l'ajout est alors totalement anonyme.
+const visible = defineModel('visible', { type: Boolean, default: false })
 </script>
 
 <template>
   <p class="step-hint">{{ t('addCompanyForm.studentHint') }}</p>
-  <p class="privacy-note">{{ t('addCompanyForm.studentPrivacyNote') }}</p>
 
-  <label class="visibility-choice">
-    <input v-model="visible" type="checkbox" class="visibility-checkbox" />
-    <span>
-      {{ t('addCompanyForm.studentShowEmailLabel') }}
-      <small>{{ t('addCompanyForm.studentShowEmailHint') }}</small>
-    </span>
-  </label>
+  <template v-if="studentEmail">
+    <p class="privacy-note">{{ t('addCompanyForm.studentPrivacyNote') }}</p>
 
-  <StudentEmailVerifier />
+    <label class="visibility-choice">
+      <input v-model="visible" type="checkbox" class="visibility-checkbox" />
+      <span>
+        {{ t('addCompanyForm.studentShowEmailLabel') }}
+        <small>{{ t('addCompanyForm.studentShowEmailHint') }}</small>
+      </span>
+    </label>
+
+    <p class="verified">✔ {{ t('addCompanyForm.studentVerified') }} <strong>{{ studentEmail }}</strong></p>
+  </template>
+  <StudentAccessNotice v-else />
 </template>
 
 <style scoped>
@@ -65,5 +64,9 @@ defineExpose({ validate })
 .visibility-checkbox {
   margin-top: 3px;
   flex-shrink: 0;
+}
+
+.verified {
+  color: var(--gray-dark);
 }
 </style>

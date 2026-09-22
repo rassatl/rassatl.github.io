@@ -4,8 +4,9 @@ import { idTokenFor, createDocument, listDocuments, getDocument } from './fixtur
 
 // Ces tests attaquent Firestore directement, sans passer par le formulaire :
 // c'est ce que ferait quelqu'un qui contourne l'interface. Ils prouvent que
-// la vérification de l'email étudiant est imposée par firestore.rules, et
-// pas seulement par l'interface.
+// les règles d'accès (format complet réservé aux étudiants vérifiés, format
+// confidentiel ouvert à l'ajout anonyme, droits admin) sont imposées par
+// firestore.rules, et pas seulement par l'interface.
 
 const RUN_ID = crypto.randomUUID().slice(0, 8)
 const STUDENT_EMAIL = `regles.${RUN_ID}@groupe-esigelec.org`
@@ -23,10 +24,21 @@ const company = (overrides = {}) => ({
   ...overrides,
 })
 
-// Proposition telle que l'envoie le formulaire : l'auteur et son choix de
-// s'afficher (ou non) sur l'entreprise publiée.
+// Proposition telle que l'envoie le formulaire complet : l'auteur et son
+// choix de s'afficher (ou non) sur l'entreprise publiée.
 const proposal = (submittedBy, overrides = {}) =>
   company({ submittedBy, submitterVisible: false, ...overrides })
+
+// Proposition telle que l'envoie le formulaire confidentiel : ni nom, ni
+// adresse, ni mission, ni auteur.
+const confidentialCompany = (overrides = {}) => ({
+  speciality: 'IA & Big Data',
+  city: 'Rouen',
+  country: 'France',
+  x: 49.4431,
+  y: 1.0993,
+  ...overrides,
+})
 
 const contact = {
   firstName: 'Ada',
@@ -36,8 +48,8 @@ const contact = {
   phone: '',
 }
 
-test.describe('proposition d\'entreprise : réservée aux étudiants vérifiés', () => {
-  test('un visiteur anonyme ne peut pas proposer d\'entreprise', async () => {
+test.describe('proposition d\'entreprise (format complet) : réservée aux étudiants vérifiés', () => {
+  test('un visiteur anonyme ne peut pas proposer d\'entreprise au format complet', async () => {
     const { status } = await createDocument(null, 'pendingCompanies', proposal(STUDENT_EMAIL))
     expect(status).toBe(403)
   })
@@ -69,9 +81,6 @@ test.describe('proposition d\'entreprise : réservée aux étudiants vérifiés'
       idToken, 'pendingCompanies', proposal('quelquun.d.autre@groupe-esigelec.org')
     )
     expect(impersonated.status).toBe(403)
-
-    const withoutAuthor = await createDocument(idToken, 'pendingCompanies', company({ submitterVisible: false }))
-    expect(withoutAuthor.status).toBe(403)
   })
 
   test('le choix de visibilité est obligatoire et doit être un booléen', async () => {
@@ -106,6 +115,63 @@ test.describe('proposition d\'entreprise : réservée aux étudiants vérifiés'
 
     const anonymous = await createDocument(null, `pendingCompanies/${id}/contacts`, contact)
     expect(anonymous.status).toBe(403)
+  })
+})
+
+test.describe('proposition de point (format confidentiel) : ajout anonyme autorisé', () => {
+  test('un visiteur anonyme peut proposer un point confidentiel, sans aucun auteur', async () => {
+    const { status } = await createDocument(null, 'pendingCompanies', confidentialCompany())
+    expect(status).toBe(200)
+  })
+
+  test("un visiteur anonyme ne peut pas s'attribuer une proposition confidentielle (usurpation)", async () => {
+    const { status } = await createDocument(null, 'pendingCompanies', confidentialCompany({ submittedBy: STUDENT_EMAIL, submitterVisible: false }))
+    expect(status).toBe(403)
+  })
+
+  test('un étudiant connecté ne peut pas utiliser le format confidentiel : il est réservé aux visiteurs non connectés', async () => {
+    const { idToken } = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
+    const { status } = await createDocument(idToken, 'pendingCompanies', confidentialCompany())
+    expect(status).toBe(403)
+  })
+
+  test('un point confidentiel ne peut pas porter les champs du format complet (nom, adresse, mission...)', async () => {
+    const withName = { ...confidentialCompany(), name: 'Fuite du nom' }
+    expect((await createDocument(null, 'pendingCompanies', withName)).status).toBe(403)
+  })
+
+  test('un point confidentiel publié ne peut pas non plus porter ces champs', async () => {
+    const { idToken } = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    const withName = { ...confidentialCompany(), name: 'Fuite du nom' }
+    expect((await createDocument(idToken, 'companies', withName)).status).toBe(403)
+    expect((await createDocument(idToken, 'companies', confidentialCompany())).status).toBe(200)
+  })
+})
+
+test.describe("moyen de contact confidentiel : rien n'est vérifié, mais au moins un champ est requis", () => {
+  test("un visiteur anonyme peut déposer un moyen de contact sous sa propre proposition confidentielle", async () => {
+    const { id: pendingId } = await createDocument(null, 'pendingCompanies', confidentialCompany())
+    const { status } = await createDocument(null, `pendingCompanies/${pendingId}/confidentialContact`, { whatsapp: '0102030405' })
+    expect(status).toBe(200)
+  })
+
+  test('un formulaire entièrement vide est refusé (au moins un champ requis)', async () => {
+    const { id: pendingId } = await createDocument(null, 'pendingCompanies', confidentialCompany())
+    const { status } = await createDocument(null, `pendingCompanies/${pendingId}/confidentialContact`, {})
+    expect(status).toBe(403)
+  })
+
+  test('un champ hors de la liste autorisée est refusé', async () => {
+    const { id: pendingId } = await createDocument(null, 'pendingCompanies', confidentialCompany())
+    const { status } = await createDocument(null, `pendingCompanies/${pendingId}/confidentialContact`, { phone: '0102030405' })
+    expect(status).toBe(403)
+  })
+
+  test("un moyen de contact ne peut pas être déposé sous une proposition du format complet", async () => {
+    const { idToken } = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
+    const { id: pendingId } = await createDocument(idToken, 'pendingCompanies', proposal(STUDENT_EMAIL))
+    const { status } = await createDocument(null, `pendingCompanies/${pendingId}/confidentialContact`, { whatsapp: '0102030405' })
+    expect(status).toBe(403)
   })
 })
 
@@ -194,5 +260,34 @@ test.describe("contacts d'une entreprise : réservés aux étudiants vérifiés"
     // Le lien envoyé au contact contient son identifiant : il doit pouvoir
     // s'en servir sans être connecté, alors que la liste, elle, est fermée.
     expect(await getDocument(null, contactPath)).toBe(200)
+  })
+})
+
+test.describe("moyen de contact d'une entreprise confidentielle publiée : réservé aux étudiants vérifiés", () => {
+  let confidentialContactPath
+
+  test.beforeAll(async () => {
+    const { idToken } = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    const { id: companyId } = await createDocument(idToken, 'companies', confidentialCompany())
+    confidentialContactPath = `companies/${companyId}/confidentialContact`
+    await createDocument(idToken, confidentialContactPath, { linkedin: 'https://www.linkedin.com/in/e2e-rules' })
+  })
+
+  test('un visiteur anonyme ne peut pas lister le moyen de contact', async () => {
+    expect(await listDocuments(null, confidentialContactPath)).toBe(403)
+  })
+
+  test('un étudiant vérifié et un admin peuvent le lister', async () => {
+    const student = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
+    expect(await listDocuments(student.idToken, confidentialContactPath)).toBe(200)
+
+    const admin = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    expect(await listDocuments(admin.idToken, confidentialContactPath)).toBe(200)
+  })
+
+  test("contrairement aux contacts du format complet, la lecture par identifiant précis reste fermée : pas de lien de masquage ici", async () => {
+    const { idToken } = await idTokenFor(ADMIN_EMAIL, { password: ADMIN_PASSWORD })
+    const listed = await createDocument(idToken, confidentialContactPath, { whatsapp: '0102030405' })
+    expect(await getDocument(null, `${confidentialContactPath}/${listed.id}`)).toBe(403)
   })
 })

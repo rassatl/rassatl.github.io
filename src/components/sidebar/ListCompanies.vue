@@ -36,7 +36,7 @@ const closeModal = () => {
         :name="company.name"
         :city="company.city"
         :country="company.country"
-        :pc="company.pc.toString()"
+        :pc="company.pc"
       />
     </li>
   </ul>

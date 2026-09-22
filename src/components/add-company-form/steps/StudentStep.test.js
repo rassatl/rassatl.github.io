@@ -1,130 +1,58 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import StudentStep from './StudentStep.vue'
 
-const { studentEmail, sendStudentLink, logout } = vi.hoisted(() => ({
-  studentEmail: { value: null },
-  sendStudentLink: vi.fn(),
-  logout: vi.fn(),
-}))
+const { studentEmail } = vi.hoisted(() => ({ studentEmail: { value: null } }))
 
-// Sidesteps Firebase: StudentStep only needs the verified-email state and the
-// two auth actions, which are mocked so each test can drive them.
+// Sidesteps Firebase and the shared login-modal state: StudentStep only
+// needs to know whether the student email is verified. The connect/sign-up
+// flow itself is covered by LoginForm.test.js.
 vi.mock('../../../composables/useAuth.js', async () => {
   const { ref } = await import('vue')
   studentEmail.value = ref(null)
-  return { useAuth: () => ({ studentEmail: studentEmail.value, sendStudentLink, logout }) }
+  return { useAuth: () => ({ studentEmail: studentEmail.value }) }
 })
-vi.mock('../../../composables/useErrorLogs.js', () => ({
-  useErrorLogs: () => ({ logError: vi.fn() }),
+const openLoginModal = vi.fn()
+vi.mock('../../../composables/useLoginModal.js', () => ({
+  useLoginModal: () => ({ open: openLoginModal }),
 }))
 
-const mountStep = () =>
-  mount(StudentStep, { global: { provide: { t: (key) => key } } })
+const mountStep = (props = {}) =>
+  mount(StudentStep, { props, global: { provide: { t: (key) => key } } })
 
 describe('StudentStep', () => {
   beforeEach(() => {
     studentEmail.value.value = null
-    sendStudentLink.mockReset().mockResolvedValue(undefined)
-    logout.mockReset().mockResolvedValue(undefined)
+    openLoginModal.mockReset()
   })
 
-  it('is invalid until the student email has been verified', () => {
+  it('never blocks: the step has no validate() the parent must call', () => {
     const wrapper = mountStep()
-    expect(wrapper.vm.validate()).toBe(false)
+    expect(wrapper.vm.validate).toBeUndefined()
+  })
 
+  it('explains the ajout stays anonymous by default when not connected', () => {
+    const wrapper = mountStep()
+    expect(wrapper.text()).toContain('addCompanyForm.studentHint')
+    expect(wrapper.text()).toContain('addCompanyForm.studentNotConnectedHint')
+    expect(wrapper.find('.visibility-checkbox').exists()).toBe(false)
+
+    // Optional: can still open the login panel to attribute the submission.
+    expect(wrapper.find('.open-login-button').exists()).toBe(true)
+  })
+
+  it('offers the visibility choice, private by default, once a verified student is connected', async () => {
     studentEmail.value.value = 'ada@groupe-esigelec.org'
-    expect(wrapper.vm.validate()).toBe(true)
-  })
-
-  it('always tells the student the email is not displayed on the site', () => {
-    const wrapper = mountStep()
-    expect(wrapper.text()).toContain('addCompanyForm.studentPrivacyNote')
-  })
-
-  it('keeps the email private by default and reports the student choosing to show it', async () => {
     const onUpdate = vi.fn()
-    const wrapper = mount(StudentStep, {
-      props: { visible: false, 'onUpdate:visible': onUpdate },
-      global: { provide: { t: (key) => key } },
-    })
+    const wrapper = mountStep({ visible: false, 'onUpdate:visible': onUpdate })
+
+    expect(wrapper.text()).toContain('addCompanyForm.studentVerified')
+    expect(wrapper.text()).toContain('ada@groupe-esigelec.org')
+
     const checkbox = wrapper.find('.visibility-checkbox')
     expect(checkbox.element.checked).toBe(false)
 
     await checkbox.setValue(true)
     expect(onUpdate).toHaveBeenLastCalledWith(true)
-
-    await checkbox.setValue(false)
-    expect(onUpdate).toHaveBeenLastCalledWith(false)
-  })
-
-  it('still offers the choice once the email is verified', () => {
-    studentEmail.value.value = 'ada@groupe-esigelec.org'
-    const wrapper = mountStep()
-    expect(wrapper.find('.visibility-checkbox').exists()).toBe(true)
-  })
-
-  it('warns the mail may land in spam or quarantine, before and after sending', async () => {
-    const wrapper = mountStep()
-    expect(wrapper.find('.spam-warning').text()).toContain('addCompanyForm.studentSpamWarning')
-
-    await wrapper.find('#student-email').setValue('ada@groupe-esigelec.org')
-    await wrapper.find('.send-button').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('addCompanyForm.studentLinkSentTo')
-    expect(wrapper.find('.spam-warning').exists()).toBe(true)
-  })
-
-  it('no longer warns once the address is verified', () => {
-    studentEmail.value.value = 'ada@groupe-esigelec.org'
-    const wrapper = mountStep()
-    expect(wrapper.find('.spam-warning').exists()).toBe(false)
-  })
-
-  it('rejects an address outside the student domain without sending anything', async () => {
-    const wrapper = mountStep()
-    await wrapper.find('#student-email').setValue('ada@gmail.com')
-    await wrapper.find('.send-button').trigger('click')
-
-    expect(sendStudentLink).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('addCompanyForm.studentEmailInvalid')
-  })
-
-  it('sends the verification link to a student address and confirms it', async () => {
-    const wrapper = mountStep()
-    await wrapper.find('#student-email').setValue('ada@groupe-esigelec.org')
-    await wrapper.find('.send-button').trigger('click')
-    await flushPromises()
-
-    // Depuis le formulaire d'ajout, aucune fiche à rouvrir au retour du lien.
-    expect(sendStudentLink).toHaveBeenCalledWith('ada@groupe-esigelec.org', null)
-    expect(wrapper.text()).toContain('addCompanyForm.studentLinkSentTo')
-    expect(wrapper.text()).toContain('ada@groupe-esigelec.org')
-    // Still not verified: only the link in the email can do that.
-    expect(wrapper.vm.validate()).toBe(false)
-  })
-
-  it('shows an error, and no confirmation, when the link cannot be sent', async () => {
-    sendStudentLink.mockRejectedValue(new Error('network'))
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const wrapper = mountStep()
-    await wrapper.find('#student-email').setValue('ada@groupe-esigelec.org')
-    await wrapper.find('.send-button').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('addCompanyForm.studentLinkError')
-    expect(wrapper.text()).not.toContain('addCompanyForm.studentLinkSentTo')
-  })
-
-  it('shows the verified address and lets the student switch to another one', async () => {
-    studentEmail.value.value = 'ada@groupe-esigelec.org'
-    const wrapper = mountStep()
-
-    expect(wrapper.find('#student-email').exists()).toBe(false)
-    expect(wrapper.text()).toContain('ada@groupe-esigelec.org')
-
-    await wrapper.find('.link-button').trigger('click')
-    expect(logout).toHaveBeenCalled()
   })
 })

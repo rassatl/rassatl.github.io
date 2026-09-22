@@ -13,7 +13,10 @@ const IABD = "IA & Big Data";
 </script>
 
 <template>
-  <!-- Composant d'affichage d'une entreprise -->
+  <!-- Composant d'affichage d'une entreprise. name/pc n'existent que pour une
+       entreprise du format complet (voir AddCompanyForm.vue) : une entreprise
+       confidentielle ne les affiche simplement pas, ce n'est pas un état de
+       chargement. -->
   <div class="company-item" :class="{ 'company-item--ia': speciality === IABD }">
     <div class="top">
       <div class="left">
@@ -23,9 +26,8 @@ const IABD = "IA & Big Data";
           </span>
           <span v-else class="skeleton skeleton-text"></span>
         </h3>
-        <p class="name">
-          <strong v-if="name" class="text">{{ name }}</strong>
-          <span v-else class="skeleton skeleton-text"></span>
+        <p v-if="name" class="name">
+          <strong class="text">{{ name }}</strong>
         </p>
       </div>
       <div class="right">
@@ -37,9 +39,8 @@ const IABD = "IA & Big Data";
           <span v-if="country">{{ t('companyItem.companyState') }} : {{ country }}</span>
           <span v-else class="skeleton skeleton-text short"></span>
         </p>
-        <p class="pc">
-          <span v-if="pc">{{ t('companyItem.companyPC') }} : {{ pc }}</span>
-          <span v-else class="skeleton skeleton-text short"></span>
+        <p v-if="pc" class="pc">
+          {{ t('companyItem.companyPC') }} : {{ pc }}
         </p>
       </div>
     </div>
