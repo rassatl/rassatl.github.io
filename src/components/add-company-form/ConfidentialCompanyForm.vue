@@ -106,11 +106,6 @@ const goNext = () => {
       return;
     }
   }
-  if (currentKey.value === 'contact' && !contactStepRef.value.validate()) {
-    stepError.value = t('addCompanyForm.confidentialContactError');
-    return;
-  }
-
   if (currentStep.value < totalSteps) {
     currentStep.value += 1;
   } else {

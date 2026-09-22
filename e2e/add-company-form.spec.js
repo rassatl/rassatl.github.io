@@ -141,11 +141,11 @@ test.describe('formulaire confidentiel (visiteur non connecté)', () => {
     await page.getByRole('button', { name: 'Suivant' }).click()
   }
 
-  test("un visiteur non connecté peut soumettre un point de façon anonyme, avec au moins un moyen de le contacter", async ({ page }) => {
+  test("un visiteur non connecté peut soumettre un point de façon anonyme, avec un moyen de le contacter", async ({ page }) => {
     const city = `E2E Confidential Ville ${RUN_ID}`
     await fillConfidentialCompanyStep(page, city)
 
-    // Étape contact : au moins un champ requis, rien n'est vérifié.
+    // Étape contact : facultative, rien n'est vérifié.
     await page.locator('#contact-personal-email').fill('ada.lovelace@example.com')
     await page.getByRole('button', { name: 'Suivant' }).click()
 
@@ -167,13 +167,20 @@ test.describe('formulaire confidentiel (visiteur non connecté)', () => {
     expect(confidentialContact.docs[0].data()).toEqual({ personalEmail: 'ada.lovelace@example.com' })
   })
 
-  test("impossible d'avancer depuis l'étape contact sans remplir au moins un champ", async ({ page }) => {
+  test("le moyen de contact est facultatif : un point peut être soumis sans en renseigner aucun", async ({ page }) => {
     const city = `E2E Confidential Ville Sans Contact ${RUN_ID}`
     await fillConfidentialCompanyStep(page, city)
 
+    // Étape contact laissée entièrement vide.
     await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: 'Ajouter le point' }).click()
 
-    await expect(page.getByText('Merci de renseigner au moins un moyen de vous contacter.').first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('city', '==', city).get()
+    expect(snapshot.size).toBe(1)
+    const confidentialContact = await snapshot.docs[0].ref.collection('confidentialContact').get()
+    expect(confidentialContact.size).toBe(0)
   })
 
   test("l'avis personnel facultatif est bien enregistré quand il est rempli", async ({ page }) => {
