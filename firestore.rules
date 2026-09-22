@@ -320,12 +320,14 @@ service cloud.firestore {
     }
 
     // Propositions d'ajout. Deux formats possibles :
-    // - le format complet (nom, adresse, site, mission...), réservé à un
-    //   étudiant vérifié connecté, qui doit porter son propre email
+    // - le format complet (nom, adresse, site, mission...), attribué à un
+    //   étudiant vérifié connecté, qui doit alors porter son propre email
     //   (submittedBy) et un choix de visibilité explicite ;
-    // - le format confidentiel (spécialité, pays, ville seulement),
-    //   réservé à un visiteur non connecté : toujours anonyme, jamais de
-    //   submittedBy ni de submitterVisible.
+    // - le format confidentiel (spécialité, pays, ville seulement) : toujours
+    //   anonyme, jamais de submittedBy ni de submitterVisible, quel que soit
+    //   l'état de connexion de qui le soumet — un visiteur non connecté n'a
+    //   que ce choix, mais un étudiant vérifié peut aussi le préférer au
+    //   format complet (voir AddCompanyForm.vue).
     // Seul un administrateur connecté peut les lire, les modifier ou les
     // supprimer (refus, ou nettoyage après validation).
     match /pendingCompanies/{pendingId} {
@@ -335,8 +337,7 @@ service cloud.firestore {
           (isStudent()
             && request.resource.data.submittedBy == request.auth.token.email
             && request.resource.data.submitterVisible is bool)
-          || (request.auth == null
-            && !('submittedBy' in request.resource.data)
+          || (!('submittedBy' in request.resource.data)
             && !('submitterVisible' in request.resource.data))
         );
       allow update: if isAdmin() && isValidPendingCompanyData(request.resource.data);

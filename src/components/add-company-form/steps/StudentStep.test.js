@@ -26,33 +26,39 @@ describe('StudentStep', () => {
     openLoginModal.mockReset()
   })
 
-  it('never blocks: the step has no validate() the parent must call', () => {
+  it('never blocks when not connected: nothing to certify, the ajout stays anonymous', () => {
     const wrapper = mountStep()
-    expect(wrapper.vm.validate).toBeUndefined()
-  })
-
-  it('explains the ajout stays anonymous by default when not connected', () => {
-    const wrapper = mountStep()
+    expect(wrapper.vm.validate()).toBe(true)
     expect(wrapper.text()).toContain('addCompanyForm.studentHint')
     expect(wrapper.text()).toContain('addCompanyForm.studentNotConnectedHint')
-    expect(wrapper.find('.visibility-checkbox').exists()).toBe(false)
+    expect(wrapper.findAll('input[type=radio]')).toHaveLength(0)
 
     // Optional: can still open the login panel to attribute the submission.
     expect(wrapper.find('.open-login-button').exists()).toBe(true)
   })
 
-  it('offers the visibility choice, private by default, once a verified student is connected', async () => {
+  it('blocks validate() until a verified student explicitly picks Oui or Non', async () => {
     studentEmail.value.value = 'ada@groupe-esigelec.org'
     const onUpdate = vi.fn()
-    const wrapper = mountStep({ visible: false, 'onUpdate:visible': onUpdate })
+    const wrapper = mountStep({ visible: null, 'onUpdate:visible': onUpdate })
 
     expect(wrapper.text()).toContain('addCompanyForm.studentVerified')
     expect(wrapper.text()).toContain('ada@groupe-esigelec.org')
 
-    const checkbox = wrapper.find('.visibility-checkbox')
-    expect(checkbox.element.checked).toBe(false)
+    // Neither radio pre-checked: no implicit "Non" the student never saw.
+    const radios = wrapper.findAll('input[type=radio]')
+    expect(radios).toHaveLength(2)
+    expect(radios[0].element.checked).toBe(false)
+    expect(radios[1].element.checked).toBe(false)
+    expect(wrapper.vm.validate()).toBe(false)
 
-    await checkbox.setValue(true)
-    expect(onUpdate).toHaveBeenLastCalledWith(true)
+    await radios[1].setValue()
+    expect(onUpdate).toHaveBeenLastCalledWith(false)
+  })
+
+  it('validate() passes once the student has picked either option', () => {
+    studentEmail.value.value = 'ada@groupe-esigelec.org'
+    expect(mountStep({ visible: true }).vm.validate()).toBe(true)
+    expect(mountStep({ visible: false }).vm.validate()).toBe(true)
   })
 })

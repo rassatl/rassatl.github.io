@@ -129,9 +129,15 @@ test.describe('proposition de point (format confidentiel) : ajout anonyme autori
     expect(status).toBe(403)
   })
 
-  test('un étudiant connecté ne peut pas utiliser le format confidentiel : il est réservé aux visiteurs non connectés', async () => {
+  test('un étudiant vérifié peut aussi utiliser le format confidentiel, toujours sans attribution', async () => {
     const { idToken } = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
     const { status } = await createDocument(idToken, 'pendingCompanies', confidentialCompany())
+    expect(status).toBe(200)
+  })
+
+  test("un étudiant connecté ne peut pas s'attribuer une proposition confidentielle (usurpation)", async () => {
+    const { idToken } = await idTokenFor(STUDENT_EMAIL, { emailVerified: true })
+    const { status } = await createDocument(idToken, 'pendingCompanies', confidentialCompany({ submittedBy: STUDENT_EMAIL, submitterVisible: false }))
     expect(status).toBe(403)
   })
 
