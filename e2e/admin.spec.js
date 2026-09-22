@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './fixtures/login.js'
 import { mockNominatim } from './fixtures/nominatim.js'
-import { seedPendingCompany, seedCompany, seedCompanyAuthor } from './fixtures/seed.js'
+import { seedPendingCompany, seedCompany, seedCompanyAuthor, seedConfidentialContact } from './fixtures/seed.js'
 import { adminDb, ADMIN_EMAIL } from './fixtures/emulator.js'
 
 const RUN_ID = crypto.randomUUID().slice(0, 8)
@@ -24,7 +24,7 @@ test('un admin peut se connecter puis se déconnecter', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Connexion' })).toBeVisible()
 })
 
-test.describe('modération des propositions en attente', () => {
+test.describe('modération des propositions en attente (format complet)', () => {
   test('un admin peut refuser une proposition', async ({ page }) => {
     const name = `E2E Reject Co ${RUN_ID}`
     await seedPendingCompany({
@@ -169,7 +169,51 @@ test.describe('modération des propositions en attente', () => {
     const author = await adminDb().collection('companyAuthors').doc(companySnapshot.docs[0].id).get()
     expect(author.data()).toMatchObject({ submittedBy: 'etudiant.visible@groupe-esigelec.org', visible: true })
   })
+})
 
+test.describe('modération des propositions en attente (format confidentiel)', () => {
+  test('un admin peut valider une proposition confidentielle, sans nom ni auteur, en republiant le moyen de contact', async ({ page }) => {
+    const city = `E2E Confidential Approve City ${RUN_ID}`
+    const pendingId = await seedPendingCompany({
+      speciality: 'IA & Big Data',
+      city,
+      country: 'France',
+      x: 43.6047,
+      y: 1.4442,
+    })
+    await seedConfidentialContact('pendingCompanies', pendingId, { schoolEmail: 'etudiant.confidentiel@groupe-esigelec.org' })
+
+    await mockNominatim(page, { country: 'France' })
+    await page.goto('/')
+    await loginAsAdmin(page)
+
+    await page.getByRole('button', { name: 'Liste des entreprises en attente' }).click()
+    const item = page.locator('.pending-companies li', { hasText: city })
+    await expect(item.locator('.submitted-by')).toHaveCount(0)
+    await item.getByRole('button', { name: 'Modifier / Valider' }).click()
+
+    // Le formulaire de révision précharge le moyen de contact déjà déposé.
+    await expect(page.locator('#contact-school-email')).toHaveValue('etudiant.confidentiel@groupe-esigelec.org')
+
+    await page.getByRole('button', { name: 'Valider' }).click()
+    await expect(page.locator('.pending-companies li', { hasText: city })).toHaveCount(0)
+
+    await expect.poll(async () => {
+      const snapshot = await adminDb().collection('companies').where('city', '==', city).get()
+      return snapshot.size
+    }).toBe(1)
+
+    const companySnapshot = await adminDb().collection('companies').where('city', '==', city).get()
+    const companyData = companySnapshot.docs[0].data()
+    expect(companyData).not.toHaveProperty('name')
+    expect(companyData).not.toHaveProperty('addedBy')
+    const author = await adminDb().collection('companyAuthors').doc(companySnapshot.docs[0].id).get()
+    expect(author.exists).toBe(false)
+
+    const publishedContact = await companySnapshot.docs[0].ref.collection('confidentialContact').get()
+    expect(publishedContact.size).toBe(1)
+    expect(publishedContact.docs[0].data()).toEqual({ schoolEmail: 'etudiant.confidentiel@groupe-esigelec.org' })
+  })
 })
 
 test("un admin voit l'auteur privé d'une entreprise, un visiteur non", async ({ page, browser }) => {
@@ -240,4 +284,36 @@ test("un admin voit les contacts sans avoir à vérifier d'email étudiant", asy
   const modal = page.locator('.modal-content')
   await expect(modal.getByText('Nadia Roux', { exact: false })).toBeVisible()
   await expect(modal.getByText('Les contacts sont réservés aux étudiants')).toHaveCount(0)
+})
+
+test("un admin ajoute directement une entreprise via le formulaire complet, sans passer par la modération", async ({ page }) => {
+  const name = `E2E Direct Admin Co ${RUN_ID}`
+  await mockNominatim(page, { country: 'France' })
+  await page.goto('/')
+  await loginAsAdmin(page)
+
+  await page.getByRole('button', { name: 'Ajouter' }).click()
+  // Un admin voit directement le formulaire complet, jamais l'étape
+  // d'attribution ni le formulaire confidentiel.
+  await expect(page.getByRole('heading', { name: 'Ajouter une entreprise', exact: true })).toBeVisible()
+
+  await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
+  await page.locator('#name').fill(name)
+  await page.locator('#country').selectOption({ label: 'France' })
+  await page.getByRole('tab', { name: 'Champs détaillés' }).click()
+  await page.locator('#address').fill('11 rue de l\'Administration')
+  await page.locator('#city').fill('Reims')
+  await page.locator('#pc').fill('51100')
+  await page.locator('.mini-map-wrapper .mini-map').click()
+  await page.getByRole('button', { name: 'Suivant' }).click()
+
+  await page.getByRole('button', { name: 'Suivant' }).click() // contacts, laissés vides
+  await page.locator('#mission').fill('Mission ajoutée directement par un admin.')
+  await page.getByRole('button', { name: 'Suivant' }).click()
+  await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+
+  await expect.poll(async () => {
+    const snapshot = await adminDb().collection('companies').where('name', '==', name).get()
+    return snapshot.size
+  }).toBe(1)
 })

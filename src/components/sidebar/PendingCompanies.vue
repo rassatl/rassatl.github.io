@@ -43,7 +43,7 @@ const quickReject = async (company) => {
             :name="company.name"
             :city="company.city"
             :country="company.country"
-            :pc="String(company.pc)"
+            :pc="company.pc"
           />
           <p v-if="company.submittedBy" class="submitted-by">
             {{ t('pendingCompanies.submittedBy') }} <strong>{{ company.submittedBy }}</strong>

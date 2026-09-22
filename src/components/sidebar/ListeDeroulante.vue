@@ -4,14 +4,13 @@ import { db } from '../../services/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import Modal from '../common/Modal.vue';
 import AddCompanyForm from '../add-company-form/AddCompanyForm.vue';
-import CompanyInformations from '../company/CompanyInformations.vue';
 import ListCompanies from './ListCompanies.vue';
 import LangSwitcher from '../common/LangSwitcher.vue'
 import LoginForm from '../auth/LoginForm.vue'
 import PendingCompanies from './PendingCompanies.vue'
 import TicketsList from './TicketsList.vue'
 import { useAuth } from '../../composables/useAuth.js'
-import { useErrorLogs } from '../../composables/useErrorLogs.js'
+import { useLoginModal } from '../../composables/useLoginModal.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 import { useTickets } from '../../composables/useTickets.js'
 
@@ -20,8 +19,8 @@ const listeDeroulanteWidth = ref(400)
 const listeDeroulanteDefaultSize = 0
 
 const t = inject('t')
-const { isAdmin, completeStudentSignIn } = useAuth()
-const { logError } = useErrorLogs()
+const { isAdmin, canViewContacts } = useAuth()
+const { isOpen: isLoginModalOpen, open: openLoginModal, close: closeLoginModal } = useLoginModal()
 const { pendingCompanies } = usePendingCompanies()
 const { openCount: openTicketsCount } = useTickets()
 
@@ -30,14 +29,10 @@ const props = defineProps({isOpen: Boolean, visibleCompanies: Array})
 const emit = defineEmits(['toggle', 'update-speciality', 'company-added'])
 
 const isModalOpen = ref(false);
-const isLoginModalOpen = ref(false);
 const isPendingModalOpen = ref(false);
 const isTicketsModalOpen = ref(false);
 const companies = ref([])
 const selectedSpeciality = ref('')
-// Fiche rouverte au retour du lien de vérification, quand l'étudiant l'avait
-// demandé depuis les contacts d'une entreprise.
-const returnedCompany = ref(null)
 
 // Fonction pour ouvrir la fenêtre modale d'ajout d'entreprise
 const openModal = () => {
@@ -52,14 +47,14 @@ const closeModal = () => {
   isModalOpen.value = false;
 };
 
-const openLoginModal = () => {
-  isLoginModalOpen.value = true;
+// L'ouverture/fermeture du panneau de connexion est gérée par useLoginModal
+// (partagée avec les endroits qui exigent un compte étudiant vérifié) ; ici
+// on ne fait que fermer la sidebar au clic, comme pour les autres modales.
+const openLoginPanel = () => {
+  openLoginModal();
   if (props.isOpen) {
     emit('toggle');
   }
-};
-const closeLoginModal = () => {
-  isLoginModalOpen.value = false;
 };
 
 const openPendingModal = () => {
@@ -130,42 +125,18 @@ onMounted(() => {
 })
 
 onMounted(fetchCompanies);
-
-// Retour depuis le lien de vérification reçu par email : connecte l'étudiant
-// puis le ramène là où il s'était arrêté, la fiche d'entreprise dont il voulait
-// voir les contacts ou, sinon, le formulaire d'ajout (y compris quand le lien
-// est invalide, pour pouvoir en redemander un).
-onMounted(async () => {
-  const link = await completeStudentSignIn(
-    () => window.prompt(t('addCompanyForm.studentConfirmEmailPrompt'))
-  );
-  if (!link) return;
-
-  if (link.error) {
-    console.error('Erreur lors de la vérification du lien étudiant :', link.error);
-    logError(link.error, 'auth:studentSignInLink');
-    alert(t('addCompanyForm.studentLinkInvalid'));
-  }
-
-  if (link.returnTo?.companyId) {
-    await fetchCompanies();
-    returnedCompany.value = companies.value.find((c) => c.id === link.returnTo.companyId) ?? null;
-    if (returnedCompany.value) return;
-  }
-  openModal();
-});
 </script>
 
 <template>
   <div>
     <div class="sidebar" :class="{ closed: !props.isOpen }" :style="{ width: props.isOpen ? listeDeroulanteWidth+'px' : listeDeroulanteDefaultSize+'px' }">
 
-      <!-- Bouton pour se connecter -->
+      <!-- Bouton pour se connecter (admin comme étudiant) -->
       <div v-if="props.isOpen" class="connection-action">
         <button
-          @click="openLoginModal"
+          @click="openLoginPanel"
           class="refresh-button"
-          :class="{ 'is-connected': isAdmin }"
+          :class="{ 'is-connected': canViewContacts }"
           :aria-label="isAdmin ? t('login.loggedInAs') : t('login.title')"
         ><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-user"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
       </div>
@@ -223,14 +194,9 @@ onMounted(async () => {
       <AddCompanyForm @refresh="handleCompanyAdded" @close="closeModal" />
     </Modal>
 
-    <!-- Fiche d'entreprise rouverte après la vérification de l'email étudiant -->
-    <Modal :isOpen="!!returnedCompany" @close="returnedCompany = null" style="--modal-width: 60%; --modal-height: 80%">
-      <CompanyInformations :company="returnedCompany" />
-    </Modal>
-
-    <!-- Fenêtre de connexion / déconnexion -->
+    <!-- Fenêtre de connexion / inscription / déconnexion (admin et étudiant) -->
     <Modal :isOpen="isLoginModalOpen" @close="closeLoginModal">
-      <LoginForm @close="closeLoginModal" />
+      <LoginForm />
     </Modal>
 
     <!-- Fenêtre de validation des entreprises en attente (admin uniquement) -->

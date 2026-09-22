@@ -41,14 +41,18 @@ Les tests ciblent la logique métier plutôt que le rendu visuel : validation de
 | `src/composables/useTickets.js` | `useTickets.test.js` | Comptage des tickets non fermés, payload de signalement (URL/user-agent tronqués), mise à jour du statut, suppression |
 | `src/composables/useErrorLogs.js` | `useErrorLogs.test.js` | Payload journalisé (message/stack/code/URL/user-agent), repli sur un message générique pour une valeur qui n'est pas une `Error`, silence si l'écriture Firestore elle-même échoue |
 | `src/components/common/StarRating.vue` | `StarRating.test.js` | Rendu du nombre d'étoiles, émission de la note cliquée, désélection en recliquant la même étoile, aucune émission en `readonly` |
-| `src/components/add-company-form/steps/CompanyStep.vue` | `CompanyStep.test.js` | Champs obligatoires, bornes de coordonnées GPS, format du code postal, normalisation d'URL (ajout de `https://`), parsing de l'adresse complète collée en un seul champ (`"12 rue de Paris, 75001 Paris, France"`) |
-| `src/utils/studentEmail.js` | `studentEmail.test.js` | Seul le domaine `@groupe-esigelec.org` est reconnu comme étudiant (insensible à la casse, refus des sous-domaines et des domaines qui y ressemblent) |
-| `src/components/add-company-form/steps/StudentStep.vue` | `StudentStep.test.js` | Étape invalide tant que l'email étudiant n'est pas vérifié, refus d'une adresse hors domaine sans envoi, envoi du lien et confirmation, erreur d'envoi, changement d'adresse, case « afficher mon email » décochée par défaut et choix remonté au formulaire |
+| `src/components/add-company-form/steps/CompanyStep.vue` (formulaire complet) | `CompanyStep.test.js` | Champs obligatoires, bornes de coordonnées GPS, format du code postal, normalisation d'URL (ajout de `https://`), parsing de l'adresse complète collée en un seul champ |
+| `src/components/add-company-form/steps/ConfidentialCompanyStep.vue` (formulaire confidentiel) | `ConfidentialCompanyStep.test.js` | Champs obligatoires (spécialité, pays, ville), bornes de coordonnées GPS, normalisation des espaces dans la ville |
 | `src/components/add-company-form/steps/ContactsStep.vue` | `ContactsStep.test.js` | Champs obligatoires par contact, format d'email, normalisation des espaces, validation indépendante de chaque contact quand il y en a plusieurs |
+| `src/components/add-company-form/steps/ConfidentialContactStep.vue` (formulaire confidentiel) | `ConfidentialContactStep.test.js` | Rien n'est vérifié (aucun format), mais au moins un des quatre champs (email perso, email étudiant, WhatsApp, LinkedIn) est requis ; plusieurs champs remplis sont tous conservés, les vides omis |
+| `src/utils/studentEmail.js` | `studentEmail.test.js` | Seul le domaine `@groupe-esigelec.org` est reconnu comme étudiant (insensible à la casse, refus des sous-domaines et des domaines qui y ressemblent) |
+| `src/components/add-company-form/steps/StudentStep.vue` | `StudentStep.test.js` | Étape jamais bloquante (le formulaire complet n'y accède que déjà connecté), case « afficher mon email » proposée (décochée par défaut, choix remonté au formulaire) une fois un compte étudiant vérifié connecté |
+| `src/components/student/StudentAccessNotice.vue` | `StudentAccessNotice.test.js` | Message d'invite affiché, ouverture du panneau de connexion global au clic |
+| `src/components/auth/LoginForm.vue` | `LoginForm.test.js` | Bascule connexion ↔ inscription ; inscription : domaine étudiant obligatoire, mots de passe qui doivent correspondre, confirmation après succès (avec avertissement indésirables), erreurs Firebase connues (email déjà utilisé, mot de passe faible) mappées à un message clair ; panneaux "connecté admin", "connecté étudiant vérifié" et "email non vérifié" (avec renvoi et actualisation) selon l'état ; pas de flash du panneau "non vérifié" pendant l'inscription (le nouveau compte est brièvement connecté avant d'être déconnecté par `useAuth.signup`) |
 
 ## Pourquoi mocker Firebase et EmailJS
 
-`useTickets`, `useEmailNotifications`, `useErrorLogs` et (indirectement, via `ContactsStep`) `usePendingCompanies` dépendent de Firebase ou d'EmailJS. Dans leurs tests, ces dépendances sont remplacées par des mocks (`vi.mock`) :
+`useTickets`, `useEmailNotifications`, `useErrorLogs` et (indirectement, via `ContactsStep`/`LoginForm`) `usePendingCompanies`/`useAuth` dépendent de Firebase ou d'EmailJS. Dans leurs tests, ces dépendances sont remplacées par des mocks (`vi.mock`) :
 
 - aucun appel réseau réel n'est fait, donc les tests sont rapides et déterministes ;
 - aucun secret (clé Firebase, clé EmailJS) n'est nécessaire pour lancer les tests, y compris en CI.
@@ -57,7 +61,7 @@ Ce qui est vérifié, ce n'est pas que Firebase/EmailJS fonctionnent (ce n'est p
 
 ## Ce qui n'est volontairement pas testé (en unitaire)
 
-- Le rendu détaillé des composants complexes (`MapView`, `AddCompanyForm`, `TicketsList`, …) et les interactions avec Leaflet/Firebase en conditions réelles : c'est le rôle des tests end-to-end (voir ci-dessous).
+- Le rendu détaillé des composants complexes (`MapView`, `FullCompanyForm`, `ConfidentialCompanyForm`, `TicketsList`, …) et les interactions avec Leaflet/Firebase en conditions réelles : c'est le rôle des tests end-to-end (voir ci-dessous). `AddCompanyForm.vue` lui-même n'est qu'un aiguillage entre ces deux formulaires selon l'état de connexion : trop trivial pour un test unitaire dédié, couvert par les tests e2e.
 - Les traductions elles-mêmes (`src/data/lang.js`) : c'est du contenu statique, pas de la logique.
 
 ## Ajouter un test unitaire
@@ -66,8 +70,8 @@ Pour une nouvelle fonction/composable pure, un test simple suffit (voir `mapIcon
 
 Pour un composant Vue :
 - fournir `t` via `global.provide` (une fonction identité `(key) => key` suffit, sauf si le test vérifie un texte traduit) ;
-- si le composant importe un composable branché sur Firebase, le mocker avec `vi.mock` plutôt que d'initialiser Firebase pour de vrai (voir `ContactsStep.test.js`) ;
-- pour tester une fonction de validation interne exposée par un composant (`defineExpose`), remplir le formulaire via les inputs rendus (`wrapper.find(...).setValue(...)`) puis appeler `wrapper.vm.validate()` / `validateFields()` (voir `CompanyStep.test.js`, `ContactsStep.test.js`).
+- si le composant importe un composable branché sur Firebase, le mocker avec `vi.mock` plutôt que d'initialiser Firebase pour de vrai (voir `ContactsStep.test.js`, ou `StudentStep.test.js` qui mocke `useAuth`) ;
+- pour tester une fonction de validation interne exposée par un composant (`defineExpose`), remplir le formulaire via les inputs rendus (`wrapper.find(...).setValue(...)`) puis appeler `wrapper.vm.validateFields()` / `validate()` (voir `CompanyStep.test.js`, `ConfidentialCompanyStep.test.js`, `ContactsStep.test.js`).
 
 ## Tests end-to-end (Playwright)
 
@@ -86,29 +90,31 @@ Contrairement aux tests unitaires (qui mockent Firebase), les tests E2E font tou
 
 Un `globalSetup` (`e2e/global-setup.js`) vide l'émulateur Firestore et crée un compte admin de test (avec son document `admins/{uid}`, qui donne les droits admin) une seule fois avant toute la suite. Les tests tournent ensuite **en série** (un seul worker) : ils partagent le même émulateur, donc chaque test seed ses propres données avec des noms uniques plutôt que de compter sur un état global figé.
 
-Le lien de vérification d'un email étudiant est envoyé par Firebase Auth, pas par EmailJS : dans l'émulateur aucun email ne part, le test lit le lien directement dans l'API de l'émulateur (`latestSignInLink` dans `e2e/fixtures/emulator.js`).
+L'email de vérification envoyé à l'inscription d'un étudiant est géré par Firebase Auth : dans l'émulateur aucun email ne part, et son lien mène de toute façon à une page hébergée par Firebase, hors de notre application. Les tests simulent donc directement le clic dessus via l'admin SDK (`markEmailVerified` dans `e2e/fixtures/emulator.js`, qui marque le compte comme vérifié), plutôt que de retrouver et visiter ce lien.
 
 EmailJS n'est volontairement pas configuré en mode `e2e` : `useEmailNotifications.js` détecte les variables `VITE_EMAILJS_*` absentes et n'envoie rien, silencieusement — aucun vrai email n'est donc envoyé pendant les tests.
 
 ### Organisation
 
+Une proposition du **formulaire complet** a un nom, qui sert de repère (`{ hasText: name }`) ; une proposition du **formulaire confidentiel** n'en a pas, c'est alors la **ville** (rendue unique par test) qui joue ce rôle (`{ hasText: city }`).
+
 | Fichier | Ce qui est vérifié |
 |---|---|
-| `e2e/company-directory.spec.js` | Une entreprise publiée apparaît dans la liste et sur ses détails (spécialité, mission, avis, auteur si l'étudiant a choisi d'être visible, aucun auteur sinon) ; les contacts sont masqués à un visiteur, qui peut vérifier son email depuis la fiche et retrouve alors cette fiche avec les contacts (session conservée au rechargement) ; le filtre par spécialité |
+| `e2e/company-directory.spec.js` | Une entreprise du format complet apparaît dans la liste et sur ses détails (nom, mission, avis, contacts réservés aux étudiants vérifiés — connexion depuis la fiche, session conservée au rechargement —, auteur si visible, aucun sinon) ; une entreprise confidentielle n'affiche que spécialité/ville/pays, son avis personnel, et son moyen de contact réservé de la même façon aux étudiants vérifiés ; le filtre par spécialité |
+| `e2e/add-company-form.spec.js` | **Formulaire complet** (étudiant connecté) : proposition avec contact(s) facultatif(s) et mission, jusqu'à l'écriture dans `pendingCompanies` avec `submittedBy`/`submitterVisible`. **Formulaire confidentiel** (visiteur non connecté) : proposition anonyme avec son moyen de contact (au moins un des quatre champs requis, rien n'est bloqué sans ça), avis personnel facultatif (mission/pays/logement) |
+| `e2e/student-verification.spec.js` | Panneau de connexion/inscription (icône de la sidebar) : lien vers l'inscription, domaine étudiant obligatoire, mots de passe qui doivent correspondre, avertissement "email non vérifié" tant que le lien n'a pas été cliqué. Choix du formulaire d'ajout selon l'état de connexion : confidentiel pour un visiteur non connecté (avec son bandeau expliquant pourquoi il est minimal et proposant de se connecter, ce qui bascule le formulaire vers le complet sans le rouvrir), complet pour un étudiant vérifié ou un admin |
+| `e2e/firestore-rules.spec.js` | `firestore.rules` imposent les règles d'accès côté serveur, en contournant l'interface, pour les deux formats : le complet est réservé à un étudiant vérifié (email propre, choix de visibilité obligatoire, contacts réservés à l'auteur) ; le confidentiel est ouvert à l'ajout anonyme mais refuse toute attribution ou tout champ du format complet (nom, adresse...) ; son moyen de contact n'accepte que les quatre champs prévus, en exige au moins un, et ne peut être déposé que sous une proposition confidentielle ; un étudiant vérifié n'a aucun droit admin ; les contacts (des deux formats) sont réservés aux étudiants vérifiés et aux admins — le format complet garde en plus une lecture par identifiant précis ouverte (lien "masquer mes informations"), que le confidentiel n'a pas |
 | `e2e/hide-contact.spec.js` | Le lien « masquer mes informations » fonctionne sans connexion (le contact est effacé dans Firestore) alors que la liste des contacts est réservée aux étudiants, et un mauvais jeton est refusé |
-| `e2e/add-company-form.spec.js` | Un étudiant peut soumettre une proposition via l'assistant en 5 étapes (vérification de l'email étudiant par lien, puis entreprise, contact facultatif, mission, avis), jusqu'à l'écriture réelle dans `pendingCompanies` (vérifiée via `firebase-admin`), avec son email dans `submittedBy` et son choix de visibilité dans `submitterVisible` (privé par défaut) |
-| `e2e/student-verification.spec.js` | La vérification est la première étape, elle bloque la suite tant que l'email n'est pas vérifié, refuse une adresse hors domaine sans envoyer de lien, et n'apparaît pas pour un admin |
-| `e2e/firestore-rules.spec.js` | `firestore.rules` imposent la vérification côté serveur, en contournant l'interface : un anonyme, un email non vérifié ou hors domaine ne peuvent pas proposer d'entreprise ; l'auteur ne peut pas se faire passer pour un autre, ni s'attribuer un `addedBy` public ; le choix de visibilité est obligatoire ; un étudiant vérifié n'a aucun droit admin (propositions, tickets, publication, documents `admins` et `companyAuthors`) ; la liste des contacts d'une entreprise est refusée à un anonyme, à un email non vérifié ou hors domaine, et acceptée pour un étudiant vérifié et un admin ; la lecture d'un contact précis reste ouverte |
 | `e2e/report-issue.spec.js` | Un visiteur peut signaler un problème, jusqu'à l'écriture réelle dans `tickets` |
-| `e2e/admin.spec.js` | Connexion/déconnexion admin ; refus et validation d'une proposition en attente (dont la publication dans `companies` : l'email de l'étudiant y figure seulement s'il a choisi d'être visible, et l'auteur est toujours consigné dans la collection privée `companyAuthors`) ; un admin voit l'auteur privé sur la fiche (un visiteur non) et les contacts sans avoir à vérifier d'email étudiant |
-| `e2e/fixtures/` | Utilitaires partagés : connexion à l'émulateur (`emulator.js`), seed de données via `firebase-admin` (`seed.js`), connexion admin UI (`login.js`), vérification d'un email étudiant via le lien lu dans l'émulateur Auth (`student.js`), appels REST Firestore avec de vrais jetons pour tester les règles (`firestore-rest.js`), mock de l'API Nominatim (`nominatim.js`) |
+| `e2e/admin.spec.js` | Connexion/déconnexion admin (le panneau de connexion affiche une confirmation plutôt que de se refermer tout seul) ; modération (format complet et confidentiel) : refus, validation (avec contacts et auteur pour le complet, avec republication du moyen de contact pour le confidentiel) ; un admin voit l'auteur privé sur la fiche (un visiteur non) et les contacts sans vérification supplémentaire ; ajout direct par un admin via le formulaire complet, sans passer par la modération |
+| `e2e/fixtures/` | Utilitaires partagés : connexion à l'émulateur (`emulator.js`), seed de données via `firebase-admin` (`seed.js`, avec `seedConfidentialContact` pour le moyen de contact du format confidentiel), connexion admin UI (`login.js`), inscription + vérification d'un compte étudiant via le panneau de connexion (`student.js`), appels REST Firestore avec de vrais jetons pour tester les règles (`firestore-rest.js`), mock de l'API Nominatim (`nominatim.js`, avec `cityResult` pour simuler une ville trouvée) |
 
 ### Pourquoi mocker Nominatim mais pas Firebase
 
-`AddCompanyForm`/`MiniMap` appellent l'API publique `nominatim.openstreetmap.org` (géocodage d'adresse, puis vérification du pays à la soumission). Contrairement à Firebase, ce n'est pas notre backend : la mocker (voir `e2e/fixtures/nominatim.js`) évite de dépendre d'un service tiers, de risquer sa politique d'usage, et rend le point placé sur la carte déterministe.
+`FullCompanyForm`/`ConfidentialCompanyForm`/`MiniMap` appellent l'API publique `nominatim.openstreetmap.org` (géocodage d'adresse ou de ville, puis vérification du pays à la soumission). Contrairement à Firebase, ce n'est pas notre backend : la mocker (voir `e2e/fixtures/nominatim.js`) évite de dépendre d'un service tiers, de risquer sa politique d'usage, et rend le point placé sur la carte déterministe.
 
 ### Ajouter un test E2E
 
 - Utiliser `e2e/fixtures/seed.js` pour préparer l'état Firestore nécessaire plutôt que de tout construire depuis l'UI quand ce n'est pas ce qui est testé.
-- Donner aux données seedées un nom incluant un identifiant unique (voir `crypto.randomUUID()` en tête des specs existants) et cibler les assertions sur ce nom précis (`{ hasText: name }`), plutôt que de compter des éléments globaux : les tests partagent le même émulateur.
+- Donner aux données seedées un nom (format complet) ou une ville (format confidentiel) incluant un identifiant unique (voir `crypto.randomUUID()` en tête des specs existants) et cibler les assertions sur ce texte précis (`{ hasText: ... }`), plutôt que de compter des éléments globaux : les tests partagent le même émulateur.
 - Après une action qui déclenche une écriture Firestore observée ensuite via `firebase-admin` (pas via l'UI), utiliser `expect.poll(...)` plutôt qu'une seule lecture : la liste affichée dans l'UI (`onSnapshot`) reflète l'écriture locale avant que le serveur ne l'ait confirmée, une lecture immédiate côté `firebase-admin` peut donc encore voir l'ancien état.

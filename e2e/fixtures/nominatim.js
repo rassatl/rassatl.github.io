@@ -5,12 +5,18 @@
 // (AddCompanyForm.vue). On intercepte les deux pour rendre les tests
 // déterministes, rapides, et ne pas dépendre d'un service tiers ni risquer
 // de dépasser sa politique d'usage pendant les tests.
-export async function mockNominatim(page, { country = 'France' } = {}) {
-  // Renvoie toujours "aucun résultat" : évite que le géocodage automatique
+export async function mockNominatim(page, { country = 'France', cityResult = null } = {}) {
+  // Par défaut, renvoie "aucun résultat" : évite que le géocodage automatique
   // (déclenché par la saisie des champs adresse/ville/pays) ne déplace le
-  // repère après qu'on l'a placé nous-même en cliquant sur la carte.
+  // repère après qu'on l'a placé nous-même en cliquant sur la carte. Passer
+  // `cityResult: { lat, lon }` simule au contraire une ville trouvée, pour
+  // tester le placement automatique du formulaire confidentiel.
   await page.route('https://nominatim.openstreetmap.org/search**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(cityResult ? [cityResult] : []),
+    })
   )
 
   // Utilisé par la vérification finale à la soumission : doit correspondre

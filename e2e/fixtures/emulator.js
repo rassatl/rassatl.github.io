@@ -75,16 +75,13 @@ export async function ensureAdminUser() {
   return admin
 }
 
-// Dernier lien de connexion envoyé à cette adresse, lu directement dans
-// l'émulateur Auth (aucun email n'est réellement envoyé) : c'est ce que
-// l'étudiant recevrait dans sa boîte mail.
-export async function latestSignInLink(email) {
-  const url = `http://${AUTH_HOST}/emulator/v1/projects/${PROJECT_ID}/oobCodes`
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Impossible de lire les liens de l'émulateur Auth : ${response.status} ${await response.text()}`)
-  }
-  const { oobCodes } = await response.json()
-  const link = oobCodes.filter((code) => code.email === email && code.requestType === 'EMAIL_SIGNIN').at(-1)
-  return link?.oobLink
+// Marque un compte comme ayant vérifié son email, directement via l'admin
+// SDK : c'est l'effet du clic sur le lien de vérification envoyé par
+// Firebase (sendEmailVerification), sans avoir besoin de récupérer ce lien
+// ni de simuler la page hébergée par Firebase qui l'applique — notre
+// application ne fait rien de plus que lire ce champ une fois vérifié.
+export async function markEmailVerified(email) {
+  const auth = adminAuth()
+  const user = await auth.getUserByEmail(email)
+  await auth.updateUser(user.uid, { emailVerified: true })
 }

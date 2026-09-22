@@ -1,20 +1,31 @@
 import { test, expect } from '@playwright/test'
 import { mockNominatim } from './fixtures/nominatim.js'
 import { adminDb } from './fixtures/emulator.js'
-import { verifyStudent, STUDENT_EMAIL } from './fixtures/student.js'
+import { signUpAndVerifyStudent } from './fixtures/student.js'
 
 const RUN_ID = crypto.randomUUID().slice(0, 8)
 const COMPANY_NAME = `E2E Wizard Co ${RUN_ID}`
 
-// Ouvre le formulaire, vérifie l'email étudiant (étape 1), remplit l'étape
-// entreprise et passe à l'étape contact. `showEmail` coche la case qui
-// autorise à afficher l'email de l'étudiant sur la fiche de l'entreprise.
-async function fillCompanyStep(page, name, { showEmail = false } = {}) {
-  await mockNominatim(page, { country: 'France' })
+// Connecte un étudiant vérifié depuis l'icône de connexion de la sidebar
+// (sans passer par le formulaire d'ajout, qui n'a plus d'étape de connexion
+// intégrée) : une fois connecté, "Ajouter" donne accès au formulaire complet
+// (nom, adresse, contacts, mission) plutôt qu'au formulaire confidentiel,
+// réservé aux visiteurs non connectés.
+async function connectAsStudent(page) {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Connexion' }).click()
+  const email = await signUpAndVerifyStudent(page)
+  await page.locator('.modal-close').click()
+  await page.locator('.toggle-button').click()
+  return email
+}
 
+// Remplit l'étape entreprise du formulaire complet et passe à l'étape contact.
+// `showEmail` coche la case qui autorise à afficher l'email de l'étudiant sur
+// la fiche de l'entreprise.
+async function fillCompanyStep(page, name, { showEmail = false } = {}) {
   await page.getByRole('button', { name: 'Ajouter' }).click()
-  await verifyStudent(page)
+  await expect(page.getByRole('heading', { name: 'Ajouter une entreprise', exact: true })).toBeVisible()
   if (showEmail) await page.getByLabel("Afficher mon email étudiant sur la fiche de l'entreprise").check()
   await page.getByRole('button', { name: 'Suivant' }).click()
 
@@ -33,76 +44,185 @@ async function fillCompanyStep(page, name, { showEmail = false } = {}) {
   await page.getByRole('button', { name: 'Suivant' }).click()
 }
 
-test("un visiteur peut soumettre une proposition d'entreprise via l'assistant", async ({ page }) => {
-  await fillCompanyStep(page, COMPANY_NAME)
+test.describe('formulaire complet (étudiant connecté)', () => {
+  test("un étudiant connecté peut soumettre une proposition complète via l'assistant", async ({ page }) => {
+    await mockNominatim(page, { country: 'France' })
+    const studentEmail = await connectAsStudent(page)
+    await fillCompanyStep(page, COMPANY_NAME)
 
-  // Étape 2 : contact
-  await page.locator('#contact-firstName-0').fill('Camille')
-  await page.locator('#contact-lastName-0').fill('Durand')
-  await page.locator('#contact-role-0').fill('Recruteuse')
-  await page.locator('#contact-email-0').fill('camille.durand@example.com')
-  await page.getByRole('button', { name: 'Suivant' }).click()
+    // Étape contact
+    await page.locator('#contact-firstName-0').fill('Camille')
+    await page.locator('#contact-lastName-0').fill('Durand')
+    await page.locator('#contact-role-0').fill('Recruteuse')
+    await page.locator('#contact-email-0').fill('camille.durand@example.com')
+    await page.getByRole('button', { name: 'Suivant' }).click()
 
-  // Étape 3 : mission
-  await page.locator('#mission').fill("Développement d'un module de reporting interne.")
-  await page.getByRole('button', { name: 'Suivant' }).click()
+    // Étape mission
+    await page.locator('#mission').fill("Développement d'un module de reporting interne.")
+    await page.getByRole('button', { name: 'Suivant' }).click()
 
-  // Étape 4 : avis (facultatif, laissé vide) puis soumission finale
-  await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+    // Étape avis (facultatif, laissé vide) puis soumission finale
+    await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
 
-  await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
 
-  const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', COMPANY_NAME).get()
-  expect(snapshot.size).toBe(1)
-  const pending = snapshot.docs[0].data()
-  expect(pending.city).toBe('Lyon')
-  expect(pending.speciality).toBe('IA & Big Data')
-  expect(pending.mission).toContain('reporting')
-  // L'email étudiant vérifié est conservé sur la proposition (pour savoir
-  // qui l'a ajoutée), jamais sur l'entreprise publiée.
-  expect(pending.submittedBy).toBe(STUDENT_EMAIL)
-  // Privé par défaut : l'étudiant n'a rien coché.
-  expect(pending.submitterVisible).toBe(false)
+    const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', COMPANY_NAME).get()
+    expect(snapshot.size).toBe(1)
+    const pending = snapshot.docs[0].data()
+    expect(pending.city).toBe('Lyon')
+    expect(pending.speciality).toBe('IA & Big Data')
+    expect(pending.mission).toContain('reporting')
+    // L'email étudiant vérifié est conservé sur la proposition (pour savoir
+    // qui l'a ajoutée), jamais sur l'entreprise publiée.
+    expect(pending.submittedBy).toBe(studentEmail)
+    // Privé par défaut : l'étudiant n'a rien coché.
+    expect(pending.submitterVisible).toBe(false)
 
-  const contacts = await snapshot.docs[0].ref.collection('contacts').get()
-  expect(contacts.size).toBe(1)
-  expect(contacts.docs[0].data().email).toBe('camille.durand@example.com')
+    const contacts = await snapshot.docs[0].ref.collection('contacts').get()
+    expect(contacts.size).toBe(1)
+    expect(contacts.docs[0].data().email).toBe('camille.durand@example.com')
+  })
+
+  test("le contact est facultatif : une proposition peut être soumise sans", async ({ page }) => {
+    const name = `${COMPANY_NAME} sans contact`
+    await mockNominatim(page, { country: 'France' })
+    await connectAsStudent(page)
+    await fillCompanyStep(page, name)
+
+    // Étape contact laissée vide
+    await page.getByRole('button', { name: 'Suivant' }).click()
+
+    // Étape mission
+    await page.locator('#mission').fill("Développement d'un module de reporting interne.")
+    await page.getByRole('button', { name: 'Suivant' }).click()
+
+    // Étape avis (facultatif, laissé vide) puis soumission finale
+    await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', name).get()
+    expect(snapshot.size).toBe(1)
+    const contacts = await snapshot.docs[0].ref.collection('contacts').get()
+    expect(contacts.size).toBe(0)
+  })
+
+  test("l'étudiant peut choisir d'afficher son email sur la fiche de l'entreprise", async ({ page }) => {
+    const name = `${COMPANY_NAME} email visible`
+    await mockNominatim(page, { country: 'France' })
+    await connectAsStudent(page)
+    await fillCompanyStep(page, name, { showEmail: true })
+
+    await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.locator('#mission').fill("Développement d'un module de reporting interne.")
+    await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', name).get()
+    expect(snapshot.size).toBe(1)
+    expect(snapshot.docs[0].data().submitterVisible).toBe(true)
+  })
 })
 
-test("le contact est facultatif : une proposition peut être soumise sans", async ({ page }) => {
-  const name = `${COMPANY_NAME} sans contact`
-  await fillCompanyStep(page, name)
+test.describe('formulaire confidentiel (visiteur non connecté)', () => {
+  async function fillConfidentialCompanyStep(page, city) {
+    await mockNominatim(page, { country: 'France' })
+    await page.goto('/')
 
-  // Étape 2 : contact laissé vide
-  await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: 'Ajouter' }).click()
+    await expect(page.getByRole('heading', { name: 'Ajouter une entreprise confidentielle' })).toBeVisible()
 
-  // Étape 3 : mission
-  await page.locator('#mission').fill("Développement d'un module de reporting interne.")
-  await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
+    await page.locator('#country').selectOption({ label: 'France' })
+    await page.locator('#city').fill(city)
+    await page.locator('.mini-map-wrapper .mini-map').click()
+    await page.getByRole('button', { name: 'Suivant' }).click()
+  }
 
-  // Étape 4 : avis (facultatif, laissé vide) puis soumission finale
-  await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+  test("un visiteur non connecté peut soumettre un point de façon anonyme, avec au moins un moyen de le contacter", async ({ page }) => {
+    const city = `E2E Confidential Ville ${RUN_ID}`
+    await fillConfidentialCompanyStep(page, city)
 
-  await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+    // Étape contact : au moins un champ requis, rien n'est vérifié.
+    await page.locator('#contact-personal-email').fill('ada.lovelace@example.com')
+    await page.getByRole('button', { name: 'Suivant' }).click()
 
-  const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', name).get()
-  expect(snapshot.size).toBe(1)
-  const contacts = await snapshot.docs[0].ref.collection('contacts').get()
-  expect(contacts.size).toBe(0)
-})
+    await page.getByRole('button', { name: 'Ajouter le point' }).click()
 
-test("l'étudiant peut choisir d'afficher son email sur la fiche de l'entreprise", async ({ page }) => {
-  const name = `${COMPANY_NAME} email visible`
-  await fillCompanyStep(page, name, { showEmail: true })
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Suivant' }).click()
-  await page.locator('#mission').fill("Développement d'un module de reporting interne.")
-  await page.getByRole('button', { name: 'Suivant' }).click()
-  await page.getByRole('button', { name: "Ajouter l'entreprise" }).click()
+    const snapshot = await adminDb().collection('pendingCompanies').where('city', '==', city).get()
+    expect(snapshot.size).toBe(1)
+    const pending = snapshot.docs[0].data()
+    expect(pending.speciality).toBe('IA & Big Data')
+    expect(pending.country).toBe('France')
+    expect(pending).not.toHaveProperty('name')
+    expect(pending).not.toHaveProperty('submittedBy')
+    expect(pending).not.toHaveProperty('submitterVisible')
 
-  await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+    const confidentialContact = await snapshot.docs[0].ref.collection('confidentialContact').get()
+    expect(confidentialContact.size).toBe(1)
+    expect(confidentialContact.docs[0].data()).toEqual({ personalEmail: 'ada.lovelace@example.com' })
+  })
 
-  const snapshot = await adminDb().collection('pendingCompanies').where('name', '==', name).get()
-  expect(snapshot.size).toBe(1)
-  expect(snapshot.docs[0].data().submitterVisible).toBe(true)
+  test("impossible d'avancer depuis l'étape contact sans remplir au moins un champ", async ({ page }) => {
+    const city = `E2E Confidential Ville Sans Contact ${RUN_ID}`
+    await fillConfidentialCompanyStep(page, city)
+
+    await page.getByRole('button', { name: 'Suivant' }).click()
+
+    await expect(page.getByText('Merci de renseigner au moins un moyen de vous contacter.').first()).toBeVisible()
+  })
+
+  test("l'avis personnel facultatif est bien enregistré quand il est rempli", async ({ page }) => {
+    const city = `E2E Confidential Ville Avis ${RUN_ID}`
+    await fillConfidentialCompanyStep(page, city)
+
+    await page.locator('#contact-whatsapp').fill('+33 6 12 34 56 78')
+    await page.getByRole('button', { name: 'Suivant' }).click()
+
+    await page.locator('#review-mission').fill("Développement d'un module de reporting interne.")
+    await page.locator('#review-country').fill('Facile à vivre, bon accueil.')
+    await page.getByRole('button', { name: 'Ajouter le point' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('city', '==', city).get()
+    expect(snapshot.size).toBe(1)
+    const pending = snapshot.docs[0].data()
+    expect(pending.review.missionFeeling).toContain('reporting')
+    expect(pending.review.countryFeeling).toContain('accueil')
+    expect(pending.review).not.toHaveProperty('housingFeeling')
+  })
+
+  test("renseigner la ville et le pays place un point par défaut au centre de la ville, sans avoir à cliquer sur la carte", async ({ page }) => {
+    const city = `E2E Confidential Ville Auto ${RUN_ID}`
+    await mockNominatim(page, { country: 'France', cityResult: { lat: 48.8566, lon: 2.3522 } })
+    await page.goto('/')
+
+    await page.getByRole('button', { name: 'Ajouter' }).click()
+    await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
+    await page.locator('#country').selectOption({ label: 'France' })
+    await page.locator('#city').fill(city)
+
+    // Aucun clic sur la carte : on attend que le géocodage (débounce inclus)
+    // place le point tout seul, avant de vérifier qu'avancer ne déclenche pas
+    // l'avertissement "placez un point".
+    await expect(page.getByText('Glissez le repère', { exact: false })).toBeVisible()
+    await page.getByRole('button', { name: 'Suivant' }).click()
+
+    await page.locator('#contact-linkedin').fill('https://www.linkedin.com/in/e2e-test')
+    await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: 'Ajouter le point' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('city', '==', city).get()
+    expect(snapshot.size).toBe(1)
+    const pending = snapshot.docs[0].data()
+    expect(pending.x).toBeCloseTo(48.8566, 3)
+    expect(pending.y).toBeCloseTo(2.3522, 3)
+  })
 })

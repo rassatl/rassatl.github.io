@@ -105,11 +105,13 @@ const fetchCompaniesAndAddMarkers = async () => {
     const companyList = [];
     querySnapshot.forEach((doc) => {
       const company = doc.data();
-      const { x, y, name, speciality } = company;
-      if (x && y && name) {
+      const { x, y, name, speciality, city, country } = company;
+      if (x && y) {
         const marker = L.marker([x, y], {icon: iconForSpeciality(speciality)}).addTo(map);
         const popupContent = document.createElement('span');
-        popupContent.textContent = name;
+        // Une entreprise confidentielle n'a pas de nom : la popup retombe
+        // alors sur spécialité + ville/pays plutôt que de rester vide.
+        popupContent.textContent = name || [speciality, [city, country].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
         marker.bindPopup(popupContent);
         companyList.push({ ...company, id: doc.id, marker });
       }

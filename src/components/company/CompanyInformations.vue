@@ -3,7 +3,7 @@ import { ref, watch, inject } from 'vue'
 import { db } from '../../services/firebase'
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import StarRating from '../common/StarRating.vue'
-import StudentEmailVerifier from '../student/StudentEmailVerifier.vue'
+import StudentAccessNotice from '../student/StudentAccessNotice.vue'
 import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import { useAuth } from '../../composables/useAuth.js'
 
@@ -15,31 +15,49 @@ const props = defineProps({
   }
 })
 
+// Une entreprise ajoutée de façon confidentielle n'a pas de nom : c'est ce
+// qui distingue les deux formats d'affichage (voir AddCompanyForm.vue pour
+// la même logique côté formulaire).
+const isFullFormat = 'name' in props.company
+
 const { logError } = useErrorLogs()
 const { isAdmin, canViewContacts } = useAuth()
 const contacts = ref([])
+// Moyen de contact du formulaire confidentiel (email perso, email étudiant,
+// WhatsApp, LinkedIn) : un seul document, jamais de sous-collection à
+// parcourir comme pour les contacts du format complet.
+const confidentialContact = ref(null)
 // Email de l'étudiant qui a ajouté l'entreprise, lu dans la collection privée
 // companyAuthors : seuls les admins y ont accès, les autres n'y touchent pas.
 const privateAuthor = ref('')
 const isLoadingContacts = ref(true)
 
 // Les contacts ne sont lus que par un étudiant vérifié ou un admin : pour les
-// autres, firestore.rules refuserait la requête (et chaque visiteur
-// journaliserait une erreur pour rien), on ne la tente donc pas.
+// autres cas, firestore.rules refuserait la requête (et chaque visiteur
+// journaliserait une erreur pour rien), on ne la tente donc pas. Le format
+// complet a une sous-collection contacts, le confidentiel une sous-collection
+// confidentialContact (un seul document) : jamais les deux à la fois.
 const fetchContacts = async (companyId, allowed) => {
   if (!companyId || !allowed) {
     contacts.value = []
+    confidentialContact.value = null
     isLoadingContacts.value = false
     return
   }
   isLoadingContacts.value = true
   try {
-    const snapshot = await getDocs(collection(db, 'companies', companyId, 'contacts'))
-    contacts.value = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    if (isFullFormat) {
+      const snapshot = await getDocs(collection(db, 'companies', companyId, 'contacts'))
+      contacts.value = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    } else {
+      const snapshot = await getDocs(collection(db, 'companies', companyId, 'confidentialContact'))
+      confidentialContact.value = snapshot.docs[0]?.data() ?? null
+    }
   } catch (error) {
     console.error('Erreur lors de la récupération des contacts :', error)
     logError(error, 'companyInformations:fetchContacts')
     contacts.value = []
+    confidentialContact.value = null
   } finally {
     isLoadingContacts.value = false
   }
@@ -67,16 +85,23 @@ watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAu
 
 <template>
   <div class="details">
-    <h2>{{ company.name }}</h2>
-    <p><strong>{{ t('companyInformations.specialityLabel') }} :</strong> {{ company.speciality }}</p>
-    <p><strong>{{ t('companyInformations.addressLabel') }} :</strong> {{ company.address }}</p>
-    <p><strong>{{ t('companyInformations.cityLabel') }} :</strong> {{ company.city }}</p>
-    <p><strong>{{ t('companyInformations.countryLabel') }} :</strong> {{ company.country }}</p>
-    <p v-if="company.pc"><strong>{{ t('companyInformations.pcLabel') }} :</strong> {{ company.pc }}</p>
-    <p v-if="company.website">
-      <strong>{{ t('companyInformations.websiteLabel') }} : </strong>
-      <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
-    </p>
+    <template v-if="isFullFormat">
+      <h2>{{ company.name }}</h2>
+      <p><strong>{{ t('companyInformations.specialityLabel') }} :</strong> {{ company.speciality }}</p>
+      <p><strong>{{ t('companyInformations.addressLabel') }} :</strong> {{ company.address }}</p>
+      <p><strong>{{ t('companyInformations.cityLabel') }} :</strong> {{ company.city }}</p>
+      <p><strong>{{ t('companyInformations.countryLabel') }} :</strong> {{ company.country }}</p>
+      <p v-if="company.pc"><strong>{{ t('companyInformations.pcLabel') }} :</strong> {{ company.pc }}</p>
+      <p v-if="company.website">
+        <strong>{{ t('companyInformations.websiteLabel') }} : </strong>
+        <a :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
+      </p>
+    </template>
+    <template v-else>
+      <h2>{{ company.speciality }}</h2>
+      <p><strong>{{ t('companyInformations.cityLabel') }} :</strong> {{ company.city }}</p>
+      <p><strong>{{ t('companyInformations.countryLabel') }} :</strong> {{ company.country }}</p>
+    </template>
 
     <p v-if="company.addedBy" class="added-by">
       <strong>{{ t('companyInformations.addedByLabel') }} :</strong> {{ company.addedBy }}
@@ -85,22 +110,36 @@ watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAu
       <strong>{{ t('companyInformations.addedByPrivateLabel') }} :</strong> {{ privateAuthor }}
     </p>
 
-    <section v-if="company.mission" class="info-section">
+    <section v-if="isFullFormat && company.mission" class="info-section">
       <h3>{{ t('companyInformations.missionTitle') }}</h3>
       <p class="mission-text">{{ company.mission }}</p>
     </section>
 
-    <section v-if="company.review?.rating" class="info-section">
+    <section v-if="isFullFormat && company.review?.rating" class="info-section">
       <h3>{{ t('companyInformations.reviewTitle') }}</h3>
       <StarRating :model-value="company.review.rating" readonly />
       <p v-if="company.review.comment" class="review-comment">{{ company.review.comment }}</p>
     </section>
 
-    <section class="info-section">
+    <section v-else-if="!isFullFormat && company.review" class="info-section">
+      <h3>{{ t('companyInformations.reviewTitleConfidential') }}</h3>
+      <StarRating v-if="company.review.rating" :model-value="company.review.rating" readonly />
+      <p v-if="company.review.missionFeeling" class="review-text">
+        <strong>{{ t('companyInformations.reviewMissionLabel') }} :</strong> {{ company.review.missionFeeling }}
+      </p>
+      <p v-if="company.review.countryFeeling" class="review-text">
+        <strong>{{ t('companyInformations.reviewCountryLabel') }} :</strong> {{ company.review.countryFeeling }}
+      </p>
+      <p v-if="company.review.housingFeeling" class="review-text">
+        <strong>{{ t('companyInformations.reviewHousingLabel') }} :</strong> {{ company.review.housingFeeling }}
+      </p>
+    </section>
+
+    <section v-if="isFullFormat" class="info-section">
       <h3>{{ t('companyInformations.contactsTitle') }}</h3>
       <div v-if="!canViewContacts" class="contacts-locked">
         <p>{{ t('companyInformations.contactsLocked') }}</p>
-        <StudentEmailVerifier input-id="contacts-student-email" :return-to="{ companyId: company.id }" />
+        <StudentAccessNotice />
       </div>
       <p v-else-if="isLoadingContacts" class="loading">{{ t('companyInformations.loadingContacts') }}</p>
       <p v-else-if="contacts.length === 0" class="empty">{{ t('companyInformations.noContacts') }}</p>
@@ -112,6 +151,39 @@ watch([() => props.company?.id, isAdmin], ([companyId, admin]) => fetchPrivateAu
             <p class="contact-detail"><a :href="`mailto:${contact.email}`">{{ contact.email }}</a></p>
             <p v-if="contact.phone" class="contact-detail"><a :href="`tel:${contact.phone}`">{{ contact.phone }}</a></p>
           </template>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Moyen de contact du formulaire confidentiel : au choix de l'étudiant
+         qui a déposé le point, jamais vérifié, réservé aux mêmes conditions
+         que les contacts du format complet. -->
+    <section v-else class="info-section">
+      <h3>{{ t('companyInformations.contactsTitle') }}</h3>
+      <div v-if="!canViewContacts" class="contacts-locked">
+        <p>{{ t('companyInformations.contactsLocked') }}</p>
+        <StudentAccessNotice />
+      </div>
+      <p v-else-if="isLoadingContacts" class="loading">{{ t('companyInformations.loadingContacts') }}</p>
+      <p v-else-if="!confidentialContact" class="empty">{{ t('companyInformations.noConfidentialContact') }}</p>
+      <ul v-else class="contacts-list">
+        <li class="contact-card">
+          <p v-if="confidentialContact.personalEmail" class="contact-detail">
+            <strong>{{ t('companyInformations.confidentialContactPersonalEmail') }} :</strong>
+            <a :href="`mailto:${confidentialContact.personalEmail}`">{{ confidentialContact.personalEmail }}</a>
+          </p>
+          <p v-if="confidentialContact.schoolEmail" class="contact-detail">
+            <strong>{{ t('companyInformations.confidentialContactSchoolEmail') }} :</strong>
+            <a :href="`mailto:${confidentialContact.schoolEmail}`">{{ confidentialContact.schoolEmail }}</a>
+          </p>
+          <p v-if="confidentialContact.whatsapp" class="contact-detail">
+            <strong>{{ t('companyInformations.confidentialContactWhatsapp') }} :</strong>
+            <a :href="`https://wa.me/${confidentialContact.whatsapp.replace(/[^0-9]/g, '')}`" target="_blank" rel="noopener noreferrer">{{ confidentialContact.whatsapp }}</a>
+          </p>
+          <p v-if="confidentialContact.linkedin" class="contact-detail">
+            <strong>{{ t('companyInformations.confidentialContactLinkedin') }} :</strong>
+            <a :href="/^https?:\/\//i.test(confidentialContact.linkedin) ? confidentialContact.linkedin : `https://${confidentialContact.linkedin}`" target="_blank" rel="noopener noreferrer">{{ confidentialContact.linkedin }}</a>
+          </p>
         </li>
       </ul>
     </section>
@@ -166,6 +238,10 @@ h2 {
 .review-comment {
   font-style: italic;
   color: var(--gray-dark);
+}
+
+.review-text {
+  white-space: pre-wrap;
 }
 
 .loading, .empty {
