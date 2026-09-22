@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import ListeDeroulante from './components/sidebar/ListeDeroulante.vue'
 import MapComponent from './components/map/MapView.vue'
 import HideContactInfo from './components/hide-contact/HideContactInfo.vue'
+import VerifyAccountInfo from './components/verify-account/VerifyAccountInfo.vue'
 import SiteInfo from './components/site-info/SiteInfo.vue'
 
 // État centralisé pour l'ouverture de la sidebar : ouverte par défaut sur
@@ -22,6 +23,16 @@ const hideContactParts = (() => {
   const [companyId, contactId, token] = hideContactParam.split(':')
   return companyId && contactId && token ? { companyId, contactId, token } : null
 })()
+
+// Lien de vérification de compte étudiant envoyé par email (EmailJS, voir
+// useEmailNotifications.js) : ?verifyAccount=<uid>:<token>. Même principe que
+// hideContact ci-dessus.
+const verifyAccountParam = params.get('verifyAccount')
+const verifyAccountParts = (() => {
+  if (!verifyAccountParam) return null
+  const [uid, token] = verifyAccountParam.split(':')
+  return uid && token ? { uid, token } : null
+})()
 </script>
 
 
@@ -31,6 +42,11 @@ const hideContactParts = (() => {
     :companyId="hideContactParts.companyId"
     :contactId="hideContactParts.contactId"
     :token="hideContactParts.token"
+  />
+  <VerifyAccountInfo
+    v-else-if="verifyAccountParts"
+    :uid="verifyAccountParts.uid"
+    :token="verifyAccountParts.token"
   />
   <template v-else>
     <SiteInfo />

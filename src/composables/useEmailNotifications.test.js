@@ -20,6 +20,7 @@ describe('useEmailNotifications', () => {
     vi.resetModules()
     vi.stubEnv('VITE_EMAILJS_SERVICE_ID', 'service-id')
     vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', 'template-id')
+    vi.stubEnv('VITE_EMAILJS_VERIFY_TEMPLATE_ID', 'verify-template-id')
     vi.stubEnv('VITE_EMAILJS_PUBLIC_KEY', 'public-key')
   })
 
@@ -68,6 +69,7 @@ describe('useEmailNotifications', () => {
     // EmailJS credentials would otherwise leak through and defeat this case.
     vi.stubEnv('VITE_EMAILJS_SERVICE_ID', '')
     vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', '')
+    vi.stubEnv('VITE_EMAILJS_VERIFY_TEMPLATE_ID', '')
     vi.stubEnv('VITE_EMAILJS_PUBLIC_KEY', '')
     const { useEmailNotifications } = await import('./useEmailNotifications.js')
     const { notifyContacts } = useEmailNotifications()
@@ -77,6 +79,44 @@ describe('useEmailNotifications', () => {
       'Acme',
       'company-1'
     )
+
+    expect(sendMock).not.toHaveBeenCalled()
+  })
+
+  it('sends the account verification email with the verify link', async () => {
+    const { useEmailNotifications } = await import('./useEmailNotifications.js')
+    const { sendVerificationEmail } = useEmailNotifications()
+
+    await sendVerificationEmail('ada@groupe-esigelec.org', 'uid1', 'tok-abc')
+
+    expect(sendMock).toHaveBeenCalledTimes(1)
+    const [serviceId, templateId, payload, options] = sendMock.mock.calls[0]
+    expect(serviceId).toBe('service-id')
+    expect(templateId).toBe('verify-template-id')
+    expect(payload.to_email).toBe('ada@groupe-esigelec.org')
+    expect(payload.verify_url).toContain('verifyAccount=uid1:tok-abc')
+    expect(options).toEqual({ publicKey: 'public-key' })
+  })
+
+  it('does not throw when the verification email fails to send', async () => {
+    sendMock.mockRejectedValueOnce(new Error('network error'))
+    const { useEmailNotifications } = await import('./useEmailNotifications.js')
+    const { sendVerificationEmail } = useEmailNotifications()
+
+    await expect(sendVerificationEmail('ada@groupe-esigelec.org', 'uid1', 'tok-abc')).resolves.toBeUndefined()
+    expect(logErrorMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips sending the verification email when EmailJS is not configured', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_EMAILJS_SERVICE_ID', '')
+    vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', '')
+    vi.stubEnv('VITE_EMAILJS_VERIFY_TEMPLATE_ID', '')
+    vi.stubEnv('VITE_EMAILJS_PUBLIC_KEY', '')
+    const { useEmailNotifications } = await import('./useEmailNotifications.js')
+    const { sendVerificationEmail } = useEmailNotifications()
+
+    await sendVerificationEmail('ada@groupe-esigelec.org', 'uid1', 'tok-abc')
 
     expect(sendMock).not.toHaveBeenCalled()
   })

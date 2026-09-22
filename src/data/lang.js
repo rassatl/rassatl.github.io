@@ -140,6 +140,15 @@ export const languages = {
       error: "Une erreur est survenue, merci de réessayer plus tard.",
       backToSite: "← Retour au site"
     },
+    verifyAccount: {
+      title: "Vérification du compte",
+      loading: "Vérification en cours...",
+      done: "Votre adresse email a été confirmée. Vous pouvez maintenant vous connecter.",
+      alreadyVerified: "Ce compte est déjà vérifié. Vous pouvez vous connecter.",
+      invalid: "Ce lien est invalide ou a déjà été utilisé.",
+      error: "Une erreur est survenue, merci de réessayer plus tard.",
+      backToSite: "← Retour au site"
+    },
     login: {
       title: "Connexion",
       openButton: "Se connecter / Créer un compte",
@@ -164,7 +173,7 @@ export const languages = {
       signupDoneTitle: "Compte créé !",
       signupDoneText: "Un email de vérification a été envoyé à votre adresse. Cliquez sur le lien qu'il contient, puis connectez-vous ci-dessous avec votre mot de passe.",
       backToLogin: "Retour à la connexion",
-      spamWarning: "Attention : cet email arrive très probablement dans vos courriers indésirables, voire en quarantaine (messagerie de l'école). Pensez à vérifier ces dossiers : il est envoyé par noreply@find-my-company-30652.firebaseapp.com.",
+      spamWarning: "Attention : cet email arrive très probablement dans vos courriers indésirables, voire en quarantaine (messagerie de l'école). Pensez à vérifier ces dossiers.",
       notVerifiedTitle: "Email non vérifié",
       notVerifiedText: "Vérifiez votre boîte mail pour confirmer votre adresse, puis actualisez ou reconnectez-vous.",
       iVerified: "J'ai cliqué sur le lien, actualiser",
@@ -358,6 +367,15 @@ export const languages = {
       error: "Something went wrong, please try again later.",
       backToSite: "← Back to site"
     },
+    verifyAccount: {
+      title: "Account verification",
+      loading: "Verifying...",
+      done: "Your email address has been confirmed. You can now log in.",
+      alreadyVerified: "This account is already verified. You can log in.",
+      invalid: "This link is invalid or has already been used.",
+      error: "Something went wrong, please try again later.",
+      backToSite: "← Back to site"
+    },
     login: {
       title: "Login",
       openButton: "Log in / Create an account",
@@ -382,7 +400,7 @@ export const languages = {
       signupDoneTitle: "Account created!",
       signupDoneText: "A verification email has been sent to your address. Click the link it contains, then log in below with your password.",
       backToLogin: "Back to login",
-      spamWarning: "Heads-up: this email will most likely land in your spam folder, or even in quarantine (school mailbox). Please check those folders: it is sent by noreply@find-my-company-30652.firebaseapp.com.",
+      spamWarning: "Heads-up: this email will most likely land in your spam folder, or even in quarantine (school mailbox). Please check those folders.",
       notVerifiedTitle: "Email not verified",
       notVerifiedText: "Check your mailbox to confirm your address, then refresh or log in again.",
       iVerified: "I clicked the link, refresh",

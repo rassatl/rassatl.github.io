@@ -90,7 +90,7 @@ Contrairement aux tests unitaires (qui mockent Firebase), les tests E2E font tou
 
 Un `globalSetup` (`e2e/global-setup.js`) vide l'émulateur Firestore et crée un compte admin de test (avec son document `admins/{uid}`, qui donne les droits admin) une seule fois avant toute la suite. Les tests tournent ensuite **en série** (un seul worker) : ils partagent le même émulateur, donc chaque test seed ses propres données avec des noms uniques plutôt que de compter sur un état global figé.
 
-L'email de vérification envoyé à l'inscription d'un étudiant est géré par Firebase Auth : dans l'émulateur aucun email ne part, et son lien mène de toute façon à une page hébergée par Firebase, hors de notre application. Les tests simulent donc directement le clic dessus via l'admin SDK (`markEmailVerified` dans `e2e/fixtures/emulator.js`, qui marque le compte comme vérifié), plutôt que de retrouver et visiter ce lien.
+L'email de vérification envoyé à l'inscription d'un étudiant est géré par EmailJS (voir `firestore.rules` : collections `studentAccounts`/`emailVerificationTokens`) : dans l'émulateur aucun email ne part (EmailJS n'est pas configuré, voir plus bas) et son lien mène à `VerifyAccountInfo.vue`, une page de notre application. Les tests simulent donc directement l'effet de ce clic via l'admin SDK (`markEmailVerified` dans `e2e/fixtures/emulator.js`, qui marque le compte comme vérifié directement dans Firestore, en contournant `firestore.rules`), plutôt que de retrouver et visiter ce lien.
 
 EmailJS n'est volontairement pas configuré en mode `e2e` : `useEmailNotifications.js` détecte les variables `VITE_EMAILJS_*` absentes et n'envoie rien, silencieusement — aucun vrai email n'est donc envoyé pendant les tests.
 

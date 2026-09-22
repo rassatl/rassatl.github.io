@@ -1,4 +1,4 @@
-import { adminAuth, AUTH_HOST, FIRESTORE_HOST, PROJECT_ID } from './emulator.js'
+import { adminAuth, adminDb, AUTH_HOST, FIRESTORE_HOST, PROJECT_ID } from './emulator.js'
 
 const PASSWORD = 'e2e-Rules-Password-123!'
 
@@ -7,10 +7,17 @@ const PASSWORD = 'e2e-Rules-Password-123!'
 // qu'aurait le client après connexion. Sert à tester firestore.rules sans
 // passer par l'interface, en attaquant directement l'API comme le ferait
 // quelqu'un qui contourne le formulaire.
+//
+// emailVerified ne pilote plus le champ Auth natif (email_verified, qu'on
+// n'utilise plus dans isStudent(), voir firestore.rules) mais le document
+// studentAccounts/{uid} : c'est lui qui fait foi désormais (voir useAuth.js).
 export async function idTokenFor(email, { emailVerified = false, password = PASSWORD } = {}) {
   const auth = adminAuth()
   const existing = await auth.getUserByEmail(email).catch(() => null)
-  if (!existing) await auth.createUser({ email, password, emailVerified })
+  const user = existing ?? await auth.createUser({ email, password })
+  if (emailVerified) {
+    await adminDb().collection('studentAccounts').doc(user.uid).set({ email, emailVerified: true }, { merge: true })
+  }
 
   const response = await fetch(
     `http://${AUTH_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key`,

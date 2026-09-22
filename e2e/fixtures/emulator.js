@@ -76,12 +76,13 @@ export async function ensureAdminUser() {
 }
 
 // Marque un compte comme ayant vérifié son email, directement via l'admin
-// SDK : c'est l'effet du clic sur le lien de vérification envoyé par
-// Firebase (sendEmailVerification), sans avoir besoin de récupérer ce lien
-// ni de simuler la page hébergée par Firebase qui l'applique — notre
-// application ne fait rien de plus que lire ce champ une fois vérifié.
+// SDK (qui contourne firestore.rules) : c'est l'effet du clic sur le lien
+// envoyé par EmailJS à l'inscription (voir useAuth.js), sans avoir besoin de
+// récupérer ce lien ni de simuler la page de vérification (VerifyAccountInfo)
+// qui l'applique — notre application ne fait rien de plus que lire ce champ
+// une fois vérifié (voir studentAccounts dans firestore.rules).
 export async function markEmailVerified(email) {
   const auth = adminAuth()
   const user = await auth.getUserByEmail(email)
-  await auth.updateUser(user.uid, { emailVerified: true })
+  await adminDb().collection('studentAccounts').doc(user.uid).set({ email, emailVerified: true }, { merge: true })
 }
