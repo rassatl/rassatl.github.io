@@ -15,13 +15,15 @@ service cloud.firestore {
     }
 
     // Étudiant dont l'email a été confirmé via le lien de vérification envoyé
-    // à l'inscription (sendEmailVerification) : email_verified ne passe à
-    // true qu'après ce clic. Le domaine doit rester synchronisé avec
-    // src/utils/studentEmail.js.
+    // par EmailJS à l'inscription (voir studentAccounts et
+    // emailVerificationTokens ci-dessous ; pas de Cloud Function, donc pas le
+    // sendEmailVerification / email_verified natif de Firebase Auth). Le
+    // domaine doit rester synchronisé avec src/utils/studentEmail.js.
     function isStudent() {
       return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.lower().matches('.+@groupe-esigelec[.]org');
+        && request.auth.token.email.lower().matches('.+@groupe-esigelec[.]org')
+        && get(/databases/$(database)/documents/studentAccounts/$(request.auth.uid)).data.emailVerified == true
+        && get(/databases/$(database)/documents/studentAccounts/$(request.auth.uid)).data.email == request.auth.token.email;
     }
 
     function companyKeys() {
@@ -207,6 +209,65 @@ service cloud.firestore {
     match /admins/{adminUid} {
       allow get: if request.auth != null && request.auth.uid == adminUid;
       allow list, write: if false;
+    }
+
+    // Statut de vérification email d'un compte étudiant (voir isStudent()).
+    // Lisible par tout le monde comme les contacts (l'identifiant, un uid
+    // Firebase, n'est ni deviné ni listé, et n'expose qu'un email déjà fourni
+    // par son propriétaire) : la page de vérification (VerifyAccountInfo,
+    // sans connexion) doit pouvoir distinguer "déjà vérifié" d'un lien
+    // invalide. La création n'est possible qu'à l'inscription, par le
+    // titulaire du compte. Le passage à true ne peut se faire qu'une fois,
+    // et seulement en prouvant la connaissance du jeton secret associé (voir
+    // emailVerificationTokens) : pas besoin d'être connecté à ce moment-là,
+    // exactement comme hideToken pour les contacts.
+    match /studentAccounts/{uid} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email', 'emailVerified'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.emailVerified == false;
+      allow update: if resource.data.emailVerified == false
+        && request.resource.data.keys().hasOnly(['email', 'emailVerified'])
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.emailVerified == true
+        && get(/databases/$(database)/documents/emailVerificationTokens/$(uid)).data.verified == true;
+      allow delete: if false;
+    }
+
+    // Jeton secret de vérification email, envoyé par EmailJS dans le lien
+    // ?verifyAccount=<uid>:<token> (voir useEmailNotifications.js et
+    // VerifyAccountInfo.vue). Jamais lisible, même par le titulaire : seule
+    // la connaissance du jeton (reçu par email) prouve qu'on est le
+    // destinataire, pas une lecture Firestore. Deux écritures possibles une
+    // fois le jeton créé : le renvoyer (nouveau jeton, réservé au titulaire
+    // connecté, tant que non vérifié) ou le confirmer (n'importe qui muni du
+    // bon jeton, une seule fois).
+    match /emailVerificationTokens/{uid} {
+      allow get, list: if false;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['token', 'email', 'verified', 'createdAt'])
+        && request.resource.data.token is string && request.resource.data.token.size() >= 24
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.verified == false
+        && request.resource.data.createdAt is timestamp;
+      allow update: if resource.data.verified == false
+        && (
+          (request.auth != null && request.auth.uid == uid
+            && request.resource.data.keys().hasOnly(['token', 'email', 'verified', 'createdAt'])
+            && request.resource.data.token is string && request.resource.data.token.size() >= 24
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.verified == false
+            && request.resource.data.createdAt is timestamp)
+          || (request.resource.data.keys().hasOnly(['token', 'email', 'verified', 'createdAt', 'guess'])
+            && request.resource.data.token == resource.data.token
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.verified == true
+            && request.resource.data.guess == resource.data.token)
+        );
+      allow delete: if false;
     }
 
     // Qui a ajouté chaque entreprise publiée (email étudiant vérifié, et s'il
