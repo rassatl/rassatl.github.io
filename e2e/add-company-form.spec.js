@@ -26,7 +26,9 @@ async function connectAsStudent(page) {
 async function fillCompanyStep(page, name, { showEmail = false } = {}) {
   await page.getByRole('button', { name: 'Ajouter' }).click()
   await expect(page.getByRole('heading', { name: 'Ajouter une entreprise', exact: true })).toBeVisible()
-  if (showEmail) await page.getByLabel("Afficher mon email étudiant sur la fiche de l'entreprise").check()
+  // Choix explicite obligatoire (Oui/Non) avant de pouvoir avancer : aucune
+  // valeur par défaut, pour certifier que l'étudiant a bien vu l'option.
+  await page.getByRole('radio', { name: showEmail ? 'Oui' : 'Non' }).check()
   await page.getByRole('button', { name: 'Suivant' }).click()
 
   await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
@@ -231,5 +233,46 @@ test.describe('formulaire confidentiel (visiteur non connecté)', () => {
     const pending = snapshot.docs[0].data()
     expect(pending.x).toBeCloseTo(48.8566, 3)
     expect(pending.y).toBeCloseTo(2.3522, 3)
+  })
+})
+
+test.describe('formulaire confidentiel (étudiant connecté)', () => {
+  test("un étudiant connecté peut basculer vers le formulaire confidentiel, toujours sans attribution", async ({ page }) => {
+    const city = `E2E Confidential Etudiant Ville ${RUN_ID}`
+    await mockNominatim(page, { country: 'France' })
+    await connectAsStudent(page)
+
+    await page.getByRole('button', { name: 'Ajouter' }).click()
+    await expect(page.getByRole('heading', { name: 'Ajouter une entreprise', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: "Préférer l'ajout confidentiel et anonyme, sans nom ni adresse" }).click()
+    await expect(page.getByRole('heading', { name: 'Ajouter une entreprise confidentielle' })).toBeVisible()
+
+    await page.locator('#speciality').selectOption({ label: 'IA & Big Data' })
+    await page.locator('#country').selectOption({ label: 'France' })
+    await page.locator('#city').fill(city)
+    await page.locator('.mini-map-wrapper .mini-map').click()
+    await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: 'Suivant' }).click()
+    await page.getByRole('button', { name: 'Ajouter le point' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Proposition envoyée' })).toBeVisible()
+
+    const snapshot = await adminDb().collection('pendingCompanies').where('city', '==', city).get()
+    expect(snapshot.size).toBe(1)
+    const pending = snapshot.docs[0].data()
+    expect(pending).not.toHaveProperty('name')
+    expect(pending).not.toHaveProperty('submittedBy')
+    expect(pending).not.toHaveProperty('submitterVisible')
+  })
+
+  test('un étudiant peut revenir au formulaire complet après avoir basculé', async ({ page }) => {
+    await connectAsStudent(page)
+
+    await page.getByRole('button', { name: 'Ajouter' }).click()
+    await page.getByRole('button', { name: "Préférer l'ajout confidentiel et anonyme, sans nom ni adresse" }).click()
+    await expect(page.getByRole('heading', { name: 'Ajouter une entreprise confidentielle' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Revenir au formulaire complet, avec nom et adresse' }).click()
+    await expect(page.getByRole('heading', { name: 'Ajouter une entreprise', exact: true })).toBeVisible()
   })
 })

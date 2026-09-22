@@ -26,9 +26,12 @@ const { logError } = useErrorLogs();
 // Quand une proposition en attente est fournie, le formulaire passe en mode
 // "révision" : il est pré-rempli et permet de la modifier avant de valider
 // ou de la refuser, au lieu de créer une nouvelle soumission.
-const props = defineProps({ pendingCompany: { type: Object, default: null } });
+const props = defineProps({
+  pendingCompany: { type: Object, default: null },
+  canSwitchToConfidential: { type: Boolean, default: false },
+});
 
-const emit = defineEmits(['refresh', 'close']);
+const emit = defineEmits(['refresh', 'close', 'switch-to-confidential']);
 
 // En mode révision, l'admin doit pouvoir juger l'ensemble de la proposition
 // d'un coup d'œil pour décider de valider ou refuser : on affiche donc
@@ -99,8 +102,11 @@ const companyStepErrorKeys = {
 };
 
 // Choix de l'étudiant : afficher (ou non) son email sur la fiche de
-// l'entreprise publiée. Privé par défaut ; partagé avec StudentStep (v-model).
-const submitterVisible = ref(false);
+// l'entreprise publiée. null tant qu'il n'a pas explicitement choisi (voir
+// StudentStep.validate(), qui bloque la suite jusqu'à un choix) ; partagé
+// avec StudentStep (v-model).
+const submitterVisible = ref(null);
+const studentStepRef = ref(null);
 const companyStepRef = ref(null);
 const miniMapRef = ref(null);
 const contactsStepRef = ref(null);
@@ -135,6 +141,10 @@ const handleSubmit = () => {
 // déjà connecté (voir AddCompanyForm.vue).
 const goNext = () => {
   stepError.value = '';
+  if (currentKey.value === 'student' && !studentStepRef.value.validate()) {
+    stepError.value = t('addCompanyForm.stepErrorStudentVisibility');
+    return;
+  }
   if (currentKey.value === 'company') {
     const { error } = companyStepRef.value.validateFields();
     if (error) {
@@ -274,7 +284,15 @@ const handleReject = async () => {
            choix de visibilité (jamais affiché sur le site sans son choix
            explicite) -->
       <div v-if="showAttributionStep" v-show="showStep('student')">
-        <StudentStep v-model:visible="submitterVisible" />
+        <StudentStep ref="studentStepRef" v-model:visible="submitterVisible" />
+        <button
+          v-if="canSwitchToConfidential"
+          type="button"
+          class="switch-mode-button"
+          @click="emit('switch-to-confidential')"
+        >
+          {{ t('addCompanyForm.switchToConfidential') }}
+        </button>
       </div>
 
       <!-- Étape entreprise -->
@@ -398,6 +416,19 @@ h2 {
   font-size: 0.85em;
   color: var(--gray-dark);
   margin: 0 0 12px 0;
+}
+
+.switch-mode-button {
+  display: block;
+  margin: 0 auto 16px auto;
+  background: none;
+  border: none;
+  color: var(--red-esigelec);
+  font-size: 0.85em;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  text-align: center;
 }
 
 .step-error {

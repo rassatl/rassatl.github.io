@@ -106,6 +106,7 @@ test.describe("choix du formulaire d'ajout selon l'état de connexion", () => {
     // Le formulaire complet démarre sur l'étape d'attribution (l'étudiant
     // est déjà reconnu), avant l'étape entreprise où vit #name.
     await expect(page.getByText('Connecté en tant qu\'étudiant vérifié :')).toBeVisible()
+    await page.getByRole('radio', { name: 'Non' }).check()
     await page.getByRole('button', { name: 'Suivant' }).click()
     await expect(page.locator('#name')).toBeVisible()
   })

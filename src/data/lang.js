@@ -54,6 +54,7 @@ export const languages = {
       step4LabelConfidential: "Avis personnel",
       stepContactLabel: "Contact",
       stepErrorStudent: "Merci de vérifier votre email étudiant avant de continuer.",
+      stepErrorStudentVisibility: "Merci d'indiquer si vous souhaitez afficher votre email sur la fiche de l'entreprise.",
       stepErrorCompany: "Merci de compléter tous les champs et de placer un point sur la carte.",
       stepErrorWebsite: "Le site web renseigné n'est pas une URL valide.",
       stepErrorContacts: "Merci de renseigner nom, prénom, rôle et un email valide pour chaque contact.",
@@ -94,7 +95,11 @@ export const languages = {
       reviewCountryLabel: "Votre ressenti sur le pays (comment vous l'avez trouvé)",
       reviewHousingLabel: "Le logement (comment vous l'avez trouvé)",
       previousButton: "Précédent",
-      nextButton: "Suivant"
+      nextButton: "Suivant",
+      switchToConfidential: "Préférer l'ajout confidentiel et anonyme, sans nom ni adresse",
+      switchToFull: "Revenir au formulaire complet, avec nom et adresse",
+      yes: "Oui",
+      no: "Non"
     },
     companyItem: {
       companyCity: "Ville",
@@ -281,6 +286,7 @@ export const languages = {
       step4LabelConfidential: "Personal review",
       stepContactLabel: "Contact",
       stepErrorStudent: "Please verify your student email before continuing.",
+      stepErrorStudentVisibility: "Please indicate whether you want to show your email on the company page.",
       stepErrorCompany: "Please fill in all fields and place a point on the map.",
       stepErrorWebsite: "The website provided is not a valid URL.",
       stepErrorContacts: "Please fill in first name, last name, role and a valid email for each contact.",
@@ -321,7 +327,11 @@ export const languages = {
       reviewCountryLabel: "Your feelings about the country (how you found it)",
       reviewHousingLabel: "Housing (how you found it)",
       previousButton: "Previous",
-      nextButton: "Next"
+      nextButton: "Next",
+      switchToConfidential: "Add confidentially and anonymously instead, without name or address",
+      switchToFull: "Switch back to the full form, with name and address",
+      yes: "Yes",
+      no: "No"
     },
     companyItem: {
       companyCity: "City",

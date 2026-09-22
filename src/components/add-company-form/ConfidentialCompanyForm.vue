@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, inject, computed } from 'vue';
 import { getCountryList } from '../../data/countries.js'
+import { useAuth } from '../../composables/useAuth.js'
 import { usePendingCompanies } from '../../composables/usePendingCompanies.js'
 import { useErrorLogs } from '../../composables/useErrorLogs.js'
 import { useLoginModal } from '../../composables/useLoginModal.js'
@@ -10,21 +11,29 @@ import ConfidentialMiniMap from './steps/ConfidentialMiniMap.vue'
 import ConfidentialContactStep from './steps/ConfidentialContactStep.vue'
 import ConfidentialReviewStep from './steps/ConfidentialReviewStep.vue'
 
-// Formulaire confidentiel : réservé aux visiteurs non connectés pour une
-// nouvelle soumission (voir AddCompanyForm.vue, qui choisit ce formulaire ou
-// FullCompanyForm.vue selon l'état de connexion), et à la révision par un
-// admin d'une proposition déjà de ce format (repérée par l'absence du champ
-// "name"). Ni nom, ni adresse, ni site web, ni contacts, ni mission : seuls
-// spécialité, pays, ville et un point sur la carte, plus un avis personnel
-// facultatif. Toujours totalement anonyme, jamais d'auteur.
+// Formulaire confidentiel : utilisé par défaut par un visiteur non connecté
+// pour une nouvelle soumission (voir AddCompanyForm.vue, qui choisit ce
+// formulaire ou FullCompanyForm.vue selon l'état de connexion), mais aussi,
+// par choix explicite (canSwitchToFull), par un étudiant connecté qui
+// préfère rester anonyme plutôt que de passer par le formulaire complet.
+// Sert aussi à la révision par un admin d'une proposition déjà de ce format
+// (repérée par l'absence du champ "name"). Ni nom, ni adresse, ni site web,
+// ni contacts, ni mission : seuls spécialité, pays, ville et un point sur la
+// carte, plus un avis personnel facultatif. Toujours totalement anonyme,
+// jamais d'auteur, quel que soit l'état de connexion de qui la soumet (voir
+// firestore.rules).
 
 const t = inject('t')
+const { studentEmail } = useAuth();
 const { submitPending, approve, reject: rejectPending } = usePendingCompanies();
 const { logError } = useErrorLogs();
 const { open: openLoginModal } = useLoginModal();
 
-const props = defineProps({ pendingCompany: { type: Object, default: null } });
-const emit = defineEmits(['refresh', 'close']);
+const props = defineProps({
+  pendingCompany: { type: Object, default: null },
+  canSwitchToFull: { type: Boolean, default: false },
+});
+const emit = defineEmits(['refresh', 'close', 'switch-to-full']);
 
 const isReviewMode = computed(() => !!props.pendingCompany);
 
@@ -204,12 +213,20 @@ const handleReject = async () => {
       <h2>{{ pendingCompany ? t('addCompanyForm.reviewTitle') : t('addCompanyForm.addConfidentialCompany') }}</h2>
       <p v-if="!isReviewMode" class="confidential-subtitle">{{ t('addCompanyForm.confidentialSubtitle') }}</p>
 
-      <div v-if="!isReviewMode" class="full-form-notice">
+      <div v-if="!isReviewMode && !studentEmail" class="full-form-notice">
         <p>{{ t('addCompanyForm.confidentialUpsellText') }}</p>
         <button type="button" class="upsell-button" @click="openLoginModal">
           {{ t('login.openButton') }}
         </button>
       </div>
+      <button
+        v-if="canSwitchToFull"
+        type="button"
+        class="switch-mode-button"
+        @click="emit('switch-to-full')"
+      >
+        {{ t('addCompanyForm.switchToFull') }}
+      </button>
 
       <StepIndicator v-if="!isReviewMode" :steps="stepLabels" :current-step="currentStep" />
 
@@ -340,6 +357,19 @@ h2 {
 
 .upsell-button:hover {
   filter: brightness(1.1);
+}
+
+.switch-mode-button {
+  display: block;
+  margin: 0 auto 16px auto;
+  background: none;
+  border: none;
+  color: var(--red-esigelec);
+  font-size: 0.85em;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  text-align: center;
 }
 
 .review-section-title {
