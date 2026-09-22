@@ -16,16 +16,9 @@ const mountStep = (props = {}) =>
   })
 
 describe('ConfidentialContactStep validate', () => {
-  it('rejects an entirely empty form: at least one field is required', () => {
+  it('accepts an entirely empty form: every field is optional', () => {
     const wrapper = mountStep()
-    expect(wrapper.vm.validate()).toBeNull()
-  })
-
-  it('shows the error message once an empty submission has been attempted', async () => {
-    const wrapper = mountStep()
-    wrapper.vm.validate()
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('addCompanyForm.confidentialContactError')
+    expect(wrapper.vm.validate()).toEqual({})
   })
 
   it('accepts a single field filled in, trimmed and normalized', async () => {

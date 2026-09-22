@@ -46,6 +46,11 @@ const deleteConfidentialContact = async (parentCollection, parentId, docs) => {
   await Promise.all(docs.map(({ id }) => deleteDoc(doc(db, parentCollection, parentId, 'confidentialContact', id))))
 }
 
+// Le moyen de contact est entièrement facultatif : {} (rien de rempli) ne
+// doit pas créer de document vide.
+const hasConfidentialContact = (confidentialContact) =>
+  !!confidentialContact && Object.keys(confidentialContact).length > 0
+
 // Publie les contacts saisis dans le formulaire sous une entreprise déjà
 // créée, en générant pour chacun le jeton qui permettra de masquer ses
 // informations personnelles depuis le lien envoyé par email.
@@ -99,7 +104,7 @@ export function usePendingCompanies() {
   //   visiteur non connecté, jamais d'auteur ni de contacts « de
   //   l'entreprise » ; `confidentialContact` porte à la place le moyen de
   //   joindre l'étudiant lui-même (email perso, email étudiant, WhatsApp,
-  //   LinkedIn — au moins un des quatre).
+  //   LinkedIn), entièrement facultatif : rien n'est écrit s'il est vide.
   const submitPending = async (data, { visible = false, contacts = null, confidentialContact = null } = {}) => {
     if (contacts !== null) {
       if (!studentEmail.value) throw new Error('Student email not verified')
@@ -114,7 +119,7 @@ export function usePendingCompanies() {
       return pendingRef.id
     }
     const pendingRef = await addDoc(collection(db, 'pendingCompanies'), data)
-    if (confidentialContact) {
+    if (hasConfidentialContact(confidentialContact)) {
       await addDoc(collection(db, 'pendingCompanies', pendingRef.id, 'confidentialContact'), confidentialContact)
     }
     return pendingRef.id
@@ -138,7 +143,7 @@ export function usePendingCompanies() {
       await notifyContacts(publishedContacts, data.name, companyRef.id)
     }
 
-    if (confidentialContact) {
+    if (hasConfidentialContact(confidentialContact)) {
       await addDoc(collection(db, 'companies', companyRef.id, 'confidentialContact'), confidentialContact)
     }
     const oldConfidentialContact = await fetchConfidentialContact('pendingCompanies', pendingId)

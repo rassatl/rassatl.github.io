@@ -1,12 +1,11 @@
 <script setup>
-import { reactive, inject, computed, ref, onMounted } from 'vue'
+import { reactive, inject, onMounted } from 'vue'
 import { usePendingCompanies } from '../../../composables/usePendingCompanies.js'
 
 // Moyen de contact du formulaire confidentiel : au choix de l'étudiant qui
 // dépose le point, pour qu'un autre étudiant intéressé puisse le joindre
-// directement. Rien n'est vérifié (ni format, ni identité) : tous les champs
-// sont facultatifs individuellement, mais au moins un doit être rempli,
-// sinon le point ne serait contactable par personne.
+// directement. Entièrement facultatif (y compris de ne rien remplir du
+// tout) : rien n'est vérifié (ni format, ni identité) non plus.
 
 const t = inject('t')
 const props = defineProps({ pendingCompany: { type: Object, default: null } });
@@ -34,24 +33,17 @@ onMounted(async () => {
 
 const normalizeText = (value, maxLength) => value.trim().replace(/\s+/g, ' ').slice(0, maxLength);
 
-// Passe à true dès qu'une tentative de validation a échoué, pour afficher
-// l'avertissement "au moins un champ" en rouge.
-const attempted = ref(false);
-const hasAnyValue = computed(() => Object.values(contact).some((value) => value.trim() !== ''));
-const showError = computed(() => attempted.value && !hasAnyValue.value);
-
-// Ni format ni identité vérifiés : validate() ne fait que garder les champs
-// remplis, normalisés, et refuse seulement un formulaire entièrement vide.
+// Ni format ni identité vérifiés, et rien n'est obligatoire : validate() ne
+// fait que garder les champs remplis, normalisés (un objet vide si aucun ne
+// l'est), sans jamais bloquer la suite.
 const validate = () => {
-  attempted.value = true;
   const cleaned = {
     personalEmail: normalizeText(contact.personalEmail, 200),
     schoolEmail: normalizeText(contact.schoolEmail, 200),
     whatsapp: normalizeText(contact.whatsapp, 50),
     linkedin: normalizeText(contact.linkedin, 300),
   };
-  const result = Object.fromEntries(Object.entries(cleaned).filter(([, value]) => value !== ''));
-  return Object.keys(result).length > 0 ? result : null;
+  return Object.fromEntries(Object.entries(cleaned).filter(([, value]) => value !== ''));
 };
 
 defineExpose({ validate });
@@ -75,7 +67,6 @@ defineExpose({ validate });
     <label for="contact-linkedin">{{ t('addCompanyForm.confidentialContactLinkedin') }}</label>
     <input id="contact-linkedin" v-model="contact.linkedin" type="text" maxlength="300" placeholder="https://www.linkedin.com/in/..." />
   </div>
-  <p v-if="showError" class="field-error">{{ t('addCompanyForm.confidentialContactError') }}</p>
 </template>
 
 <style scoped>
